@@ -243,25 +243,42 @@ async fn copy_included(env_path: &str, from: &Path, to: &Path) -> usize {
     }
     let files: Vec<String> = out.stdout.split('\0').filter(|p| inside(p)).take(INCLUDE_MAX).map(str::to_string).collect();
     let (from, to) = (from.to_path_buf(), to.to_path_buf());
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut copied = 0;
-        for rel in files {
-            let (src, dst) = (from.join(&rel), to.join(&rel));
-            let Ok(meta) = std::fs::symlink_metadata(&src) else { continue };
-            if std::fs::symlink_metadata(&dst).is_ok() || dst.parent().is_some_and(|p| std::fs::create_dir_all(p).is_err()) {
-                continue;
-            }
-            let done = if meta.file_type().is_symlink() {
-                std::fs::read_link(&src).and_then(|target| std::os::unix::fs::symlink(target, &dst)).is_ok()
-            } else {
-                meta.is_file() && std::fs::copy(&src, &dst).is_ok()
-            };
-            copied += usize::from(done);
+    tauri::async_runtime::spawn_blocking(move || files.iter().filter(|rel| copy_into(&to, rel, &from.join(rel))).count())
+        .await
+        .unwrap_or(0)
+}
+
+/// Copies one file into the new worktree without ever leaving it. A branch can track a link to any
+/// folder: a link on the way stops the copy, and nothing already there is overwritten or followed.
+fn copy_into(root: &Path, rel: &str, src: &Path) -> bool {
+    let rel = Path::new(rel);
+    let Some(name) = rel.file_name() else { return false };
+    let mut dir = root.to_path_buf();
+    for part in rel.parent().map(Path::components).into_iter().flatten() {
+        dir.push(part);
+        match std::fs::symlink_metadata(&dir) {
+            Ok(m) if m.is_dir() => {}
+            Ok(_) => return false,
+            Err(_) if std::fs::create_dir(&dir).is_ok() => {}
+            Err(_) => return false,
         }
-        copied
-    })
-    .await
-    .unwrap_or(0)
+    }
+    let dst = dir.join(name);
+    let Ok(meta) = std::fs::symlink_metadata(src) else { return false };
+    if meta.file_type().is_symlink() {
+        return std::fs::read_link(src).and_then(|target| std::os::unix::fs::symlink(target, &dst)).is_ok();
+    }
+    if !meta.is_file() {
+        return false;
+    }
+    let copy = || -> std::io::Result<()> {
+        let mut input = std::fs::File::open(src)?;
+        // O_EXCL: refuses an existing file, and a link put in its place.
+        let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(&dst)?;
+        std::io::copy(&mut input, &mut output)?;
+        output.set_permissions(meta.permissions())
+    };
+    copy().is_ok()
 }
 
 /// Creates a worktree for a new conversation, from `base` (the folder's current branch by default).
@@ -498,6 +515,33 @@ mod tests {
         assert!(!path.exists() && std::fs::read_dir(&bin).unwrap().next().is_none());
         assert!(!block(branch_exists(&env, &dir, &wt.branch)).unwrap());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn copy_stays_inside() {
+        let dir = repo();
+        let env = env_path();
+        // A branch tracks a link to a folder outside the repository.
+        let outside = temp_dir("outside");
+        sh(&dir, &["checkout", "-q", "-b", "trap"]);
+        std::os::unix::fs::symlink(&outside, dir.join("conf")).unwrap();
+        sh(&dir, &["add", "conf"]);
+        sh(&dir, &["commit", "-q", "-m", "link"]);
+        sh(&dir, &["checkout", "-q", "main"]);
+        // Here, `conf` is a real folder, with files `.worktreeinclude` asks to copy.
+        std::fs::create_dir(dir.join("conf")).unwrap();
+        std::fs::write(dir.join("conf/.env"), "SECRET=1\n").unwrap();
+        std::fs::write(dir.join(".env"), "TOP=1\n").unwrap();
+        std::fs::write(dir.join(".worktreeinclude"), ".env\n").unwrap();
+        let (wt, copied) = block(create(&env, dir.to_str().unwrap(), Some("trap"), "claude", "trap")).unwrap();
+        assert_eq!(copied, 1);
+        assert!(std::fs::read_dir(&outside).unwrap().next().is_none(), "a file was written outside the worktree");
+        assert_eq!(std::fs::read_to_string(Path::new(&wt.path).join(".env")).unwrap(), "TOP=1\n");
+        // Nothing already in the worktree is overwritten.
+        assert!(!copy_into(Path::new(&wt.path), ".env", &dir.join("conf/.env")));
+        assert_eq!(std::fs::read_to_string(Path::new(&wt.path).join(".env")).unwrap(), "TOP=1\n");
+        let _ = std::fs::remove_dir_all(dir);
+        let _ = std::fs::remove_dir_all(outside);
     }
 
     #[test]
