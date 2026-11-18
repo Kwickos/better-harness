@@ -752,7 +752,7 @@ impl Hub {
             while let Some(line) = lines.next_line().await.map_err(|e| e.to_string())? {
                 let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
                 if v["type"] == "control_response" && v["response"]["request_id"] == "commands" {
-                    return Ok(v["response"]["response"]["commands"].clone());
+                    return Ok(v["response"]["response"].clone());
                 }
             }
             Err(tr("The CLI stopped without answering.", "Le CLI s'est arrêté sans répondre.").to_string())
@@ -760,8 +760,21 @@ impl Hub {
         let answer = tokio::time::timeout(COMMANDS_TIMEOUT, read).await;
         // The process served only for this, along with any children.
         kill_group(pid, libc::SIGTERM);
-        let commands = answer.map_err(|_| tr("The CLI is taking too long to answer.", "Le CLI met trop de temps à répondre.").to_string())??;
-        Ok(self.remember_commands(cwd, &commands))
+        let response = answer.map_err(|_| tr("The CLI is taking too long to answer.", "Le CLI met trop de temps à répondre.").to_string())??;
+        // The same answer carries the models: the UI gets them before any conversation starts.
+        if response.get("models").is_some() {
+            self.emit_capabilities("", &response);
+        }
+        Ok(self.remember_commands(cwd, &response["commands"]))
+    }
+
+    /// Answer to `initialize`: the models the CLI offers, with their effort levels.
+    fn emit_capabilities(&self, sid: &str, response: &Value) {
+        self.emit(UiEvent::Capabilities {
+            sid: sid.into(),
+            models: response["models"].clone(),
+            plan: response["account"]["subscriptionType"].as_str().map(str::to_string),
+        });
     }
 
     // ---------- archive and deletion ----------
@@ -1231,11 +1244,7 @@ impl Hub {
                     if let (Some(cwd), true) = (cwd, r["response"]["commands"].is_array()) {
                         self.remember_commands(&cwd, &r["response"]["commands"]);
                     }
-                    self.emit(UiEvent::Capabilities {
-                        sid: sid.into(),
-                        models: r["response"]["models"].clone(),
-                        plan: r["response"]["account"]["subscriptionType"].as_str().map(str::to_string),
-                    });
+                    self.emit_capabilities(sid, &r["response"]);
                 }
             }
             "control_cancel_request" => {

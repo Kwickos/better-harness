@@ -146,12 +146,13 @@ const REPLY_2 = `Done. The composer now groups the text, the model and the mode:
 Want me to apply the same logic to the new session dialog?`;
 
 const LEVELS = ["low", "medium", "high", "xhigh", "max"];
+// Same shape as the CLI's answer to `initialize` (2.1.327): Fable comes as a full id, not an alias.
 const MODELS = [
-  { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)", description: "Opus 5.5 · for complex everyday tasks", supportedEffortLevels: LEVELS },
-  { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1", description: "Most capable, for long and difficult tasks", supportedEffortLevels: LEVELS },
-  { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5", description: "For complex everyday tasks", supportedEffortLevels: LEVELS },
-  { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet 5.5", description: "Efficient for routine tasks", supportedEffortLevels: LEVELS },
-  { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku 5.5", description: "Fastest", supportedEffortLevels: LEVELS },
+  { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)", description: "Opus 5.5 · Best for everyday, complex tasks", supportedEffortLevels: LEVELS },
+  { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus", description: "Opus 5.5 · Best for everyday, complex tasks", supportedEffortLevels: LEVELS },
+  { value: "claude-fable-5-2[1m]", resolvedModel: "claude-fable-5-2", displayName: "Fable", description: "Fable 5.2 · Most capable for your hardest and longest-running tasks", supportedEffortLevels: LEVELS },
+  { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet", description: "Sonnet 5.5 · Efficient for routine tasks", supportedEffortLevels: LEVELS },
+  { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku", description: "Haiku 5.5 · Fastest for quick answers", supportedEffortLevels: LEVELS },
 ];
 
 const servers = new Map<string, ServerInfo>();

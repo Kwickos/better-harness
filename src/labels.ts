@@ -131,26 +131,20 @@ export const modes = (): { id: string; label: string; icon: IconName }[] => [
 ];
 export const modeOf = (id: string) => modes().find((m) => m.id === id) ?? modes()[0];
 
-/** Fallback list until the CLI has sent its own (reply to `initialize`). */
-const fallback = (): ModelInfo[] => [
-  { value: "default", displayName: t("Default") },
-  { value: "opus", displayName: "Opus" },
-  { value: "sonnet", displayName: "Sonnet" },
-  { value: "haiku", displayName: "Haiku" },
-];
-
 let cache: ModelInfo[] | null = null;
+/** The models the CLI offers (reply to `initialize`), kept from one launch to the next. */
 export function models(): ModelInfo[] {
   if (!cache) {
     try {
       const raw = localStorage.getItem("bh.models");
-      cache = raw ? (JSON.parse(raw) as ModelInfo[]) : null;
+      cache = raw ? (JSON.parse(raw) as ModelInfo[]) : [];
     } catch {
-      cache = null;
+      cache = [];
     }
   }
-  return cache?.length ? cache : fallback();
+  return cache;
 }
+export const hasModels = () => models().length > 0;
 export function rememberModels(list: ModelInfo[]) {
   cache = list;
   try {
@@ -178,11 +172,17 @@ const explicit = (id: string | null | undefined) => (id && id !== "default" ? id
 /** The model set in the CLI settings, if any. */
 const cliModel = () => explicit(cli.model);
 
-/** Models offered: the main aliases (Opus, Sonnet, Haiku…), one per family. */
-export const modelChoices = () =>
-  models()
-    .filter((m) => m.value !== "default" && !m.value.startsWith("claude-"))
-    .map((m) => ({ ...m, displayName: modelName(m) }));
+/**
+ * Models offered: the CLI's list as it sends it, without its "default" entry, one per name.
+ * Some entries are full ids (Fable comes as `claude-fable-5-2[1m]`): they stay.
+ */
+export function modelChoices(): ModelInfo[] {
+  const seen = new Set<string>();
+  return models()
+    .filter((m) => m.value !== "default")
+    .map((m) => ({ ...m, displayName: modelName(m) }))
+    .filter((m) => !seen.has(m.displayName) && !!seen.add(m.displayName));
+}
 
 /** Without an explicit choice, the model the CLI will use is the one checked. */
 export function isCurrentModel(m: ModelInfo, id: string | null | undefined): boolean {

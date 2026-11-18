@@ -2,7 +2,7 @@ import { fmtMb, fmtNumber, lang, onLangChange, setLang, t, tp, translateDom } fr
 import "./errors";
 import { tauriApi, type UpdateState, type UsageWindows, type Api, type ContextUsage, type HistoryEntry, type PermissionEv, type ProcStat, type SessionInfo, type Settings, type UiEvent } from "./api";
 import { icon, type IconName } from "./icons";
-import { deleteNote, effectiveEffort, effortLabel, effortLevels, isCurrentModel, modes, modeOf, modelChoices, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
+import { deleteNote, effectiveEffort, effortLabel, effortLevels, hasModels, isCurrentModel, modes, modeOf, modelChoices, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
 import { closeMenu, confirmMenu, menuElement, menuItem, onMenuChange, segmented, showMenu, type MenuEntry } from "./menu";
 import { animateOut, DUR, enter, flipY, goLive, heightIn, heightOut, iconIn, leave, motionLive, swapText, textIn } from "./motion";
 import { initComposer } from "./composer";
@@ -1506,6 +1506,9 @@ async function boot() {
   draft.effort = settings.defaultEffort;
   const lastDir = settings.recentDirs[0] ?? "";
   draft.cwd = lastDir === scratchDir ? "" : lastDir;
+  // No model list from the CLI yet (first launch): ask it in the background, without a message to the model.
+  const probeDir = draft.cwd || scratchDir;
+  if (!hasModels() && probeDir) void api.listCommands(probeDir).catch(() => undefined);
   for (const info of await api.listSessions()) view(info);
   const first = [...views.values()].sort((a, b) => b.info.lastActiveMs - a.info.lastActiveMs)[0];
   if (first) await activate(first.info.sid);
