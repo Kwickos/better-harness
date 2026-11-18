@@ -290,6 +290,12 @@ pub async fn list_commands(hub: H<'_>, cwd: String) -> Result<serde_json::Value,
     hub.commands(&cwd).await
 }
 
+/// Models of the installed CLI (its answer to `initialize`), asked without a session.
+#[tauri::command]
+pub async fn cli_models(hub: H<'_>, cwd: String) -> Result<serde_json::Value, String> {
+    hub.models(&cwd).await
+}
+
 /// Files and folders suggested after "@".
 #[tauri::command]
 pub async fn mention_files(cwd: String, query: String) -> Result<Vec<String>, String> {

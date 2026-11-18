@@ -714,6 +714,32 @@ impl Hub {
         if !std::path::Path::new(cwd).is_dir() {
             return Ok(json!([]));
         }
+        let answer = self.initialize(cwd).await?;
+        Ok(self.remember_commands(cwd, &answer["commands"]))
+    }
+
+    /// Models of the installed CLI, without waiting for a session to send them: after a
+    /// `claude update`, the cached list would still be the previous version's.
+    pub async fn models(&self, cwd: &str) -> Result<Value, String> {
+        let dir = if std::path::Path::new(cwd).is_dir() {
+            cwd.to_string()
+        } else {
+            dirs::home_dir().ok_or(tr("No home folder.", "Pas de dossier personnel."))?.display().to_string()
+        };
+        let answer = self.initialize(&dir).await?;
+        // The same answer gives the commands: "/" won't have to ask again.
+        if dir == cwd && answer["commands"].is_array() {
+            self.remember_commands(cwd, &answer["commands"]);
+        }
+        match &answer["models"] {
+            models @ Value::Array(_) => Ok(models.clone()),
+            _ => Err(tr("The CLI did not list its models.", "Le CLI n'a pas donné ses modèles.").to_string()),
+        }
+    }
+
+    /// Starts a throwaway `claude` only to read its answer to `initialize` (commands,
+    /// models…), without sending it a message.
+    async fn initialize(&self, cwd: &str) -> Result<Value, String> {
         let explicit = self.settings.lock().unwrap().claude_path.clone();
         let claude = crate::shellenv::resolve_claude(explicit.as_deref()).await.ok_or(tr("claude CLI not found.", "CLI claude introuvable."))?;
         let mut cmd = Command::new(&claude);
@@ -746,13 +772,13 @@ impl Hub {
         let mut stdin = child.stdin.take().ok_or(tr("stdin unavailable", "stdin indisponible"))?;
         let stdout = child.stdout.take().ok_or(tr("stdout unavailable", "stdout indisponible"))?;
         let read = async {
-            let request = json!({ "type": "control_request", "request_id": "commands", "request": { "subtype": "initialize" } });
+            let request = json!({ "type": "control_request", "request_id": "probe", "request": { "subtype": "initialize" } });
             stdin.write_all(format!("{request}\n").as_bytes()).await.map_err(|e| e.to_string())?;
             let mut lines = BufReader::new(stdout).lines();
             while let Some(line) = lines.next_line().await.map_err(|e| e.to_string())? {
                 let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
-                if v["type"] == "control_response" && v["response"]["request_id"] == "commands" {
-                    return Ok(v["response"]["response"]["commands"].clone());
+                if v["type"] == "control_response" && v["response"]["request_id"] == "probe" {
+                    return Ok(v["response"]["response"].clone());
                 }
             }
             Err(tr("The CLI stopped without answering.", "Le CLI s'est arrêté sans répondre.").to_string())
@@ -760,8 +786,7 @@ impl Hub {
         let answer = tokio::time::timeout(COMMANDS_TIMEOUT, read).await;
         // The process served only for this, along with any children.
         kill_group(pid, libc::SIGTERM);
-        let commands = answer.map_err(|_| tr("The CLI is taking too long to answer.", "Le CLI met trop de temps à répondre.").to_string())??;
-        Ok(self.remember_commands(cwd, &commands))
+        answer.map_err(|_| tr("The CLI is taking too long to answer.", "Le CLI met trop de temps à répondre.").to_string())?
     }
 
     // ---------- archive and deletion ----------

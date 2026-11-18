@@ -139,22 +139,40 @@ const fallback = (): ModelInfo[] => [
   { value: "haiku", displayName: "Haiku" },
 ];
 
+const MODELS_KEY = "bh.models";
+/** `claude --version` of the CLI the cached list was asked from. */
+const MODELS_CLI_KEY = "bh.models.cli";
+
 let cache: ModelInfo[] | null = null;
-export function models(): ModelInfo[] {
+function cached(): ModelInfo[] | null {
   if (!cache) {
     try {
-      const raw = localStorage.getItem("bh.models");
+      const raw = localStorage.getItem(MODELS_KEY);
       cache = raw ? (JSON.parse(raw) as ModelInfo[]) : null;
     } catch {
       cache = null;
     }
   }
-  return cache?.length ? cache : fallback();
+  return cache?.length ? cache : null;
 }
-export function rememberModels(list: ModelInfo[]) {
+export const models = (): ModelInfo[] => cached() ?? fallback();
+
+/** CLI version the cached list belongs to: null if unknown, or if there is no list yet. */
+export function modelsCli(): string | null {
+  if (!cached()) return null;
+  try {
+    return localStorage.getItem(MODELS_CLI_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** `cli`: the version that gave the list, when it is known. */
+export function rememberModels(list: ModelInfo[], cli?: string) {
   cache = list;
   try {
-    localStorage.setItem("bh.models", JSON.stringify(list));
+    localStorage.setItem(MODELS_KEY, JSON.stringify(list));
+    if (cli) localStorage.setItem(MODELS_CLI_KEY, cli);
   } catch {
     /* storage unavailable: the list stays in memory */
   }
