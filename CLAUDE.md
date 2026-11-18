@@ -4,7 +4,7 @@ The repository rules are in [CONTRIBUTING.md](CONTRIBUTING.md). GitHub enforces 
 
 - Never commit or push to `main`. Work on the session's branch (`features/…`) or on a `<type>/<subject>` branch.
 - PR title: `<type>: <description>`, with a type among feat, fix, perf, refactor, docs, test, build, ci, chore, revert. It becomes the commit on `main`.
-- Commits by `Kwickos <Kwickos@users.noreply.github.com>`, without `Co-authored-by`.
+- Commits by `Kwickos <126871467+Kwickos@users.noreply.github.com>`, without `Co-authored-by`.
 - Squash merge only (`gh pr merge --squash`).
 - Do not touch versions, tags or releases: only `npm run release` does it, and only when the user asks.
 - A hook refusal gets fixed, not bypassed: no `--no-verify`, no change to `core.hooksPath`.
