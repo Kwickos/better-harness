@@ -51,12 +51,16 @@ export function commandes(ligne) {
 }
 
 // Mots qui précèdent la vraie commande (préfixes et mots-clés du shell).
-const ENVELOPPES = new Set(["rtk", "proxy", "command", "env", "sudo", "time", "nohup", "exec", "builtin", "nice", "caffeinate", "{", "}", "!", "if", "then", "else", "elif", "do", "while", "until"]);
+const ENVELOPPES = new Set(["rtk", "proxy", "builtin", "{", "}", "!", "if", "then", "else", "elif", "do", "while", "until"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish"]);
 const INTERPRETES = new Set(["node", "python", "python3", "ruby", "perl", "deno", "bun", "osascript", "php"]);
 /** Fichiers qui font respecter les règles : une PR qui les touche se merge par l'utilisateur, pas par une session. */
 export const FICHIERS_REGLES = /^(scripts\/(regles|protections|release)\.mjs|\.github\/|\.githooks\/|\.claude\/(hooks\/|settings\.json))/;
-const CHEMINS_HOOKS = /(^|\/)\.githooks(\/|$)|\.git\/hooks|\.claude\/hooks|\.claude\/settings/;
+const CHEMINS_HOOKS = /(^|\/)\.githooks(\/|$)|\.git\/hooks|\.claude\/hooks|\.claude\/settings|scripts\/(regles|protections|release)\.mjs/;
+/** Mots dont le shell changerait le sens (variables, accolades, jokers) : refusés là où ils désignent des refs. */
+const EXPANSION = /[$`{}*?[\]]/;
+// Préfixes qui ont leurs propres options : on analyse à partir du premier git/gh qui suit.
+const LANCEURS = new Set(["sudo", "env", "nice", "timeout", "caffeinate", "nohup", "time", "command", "exec", "stdbuf", "arch", "ionice", "doas"]);
 
 /** `a` est-elle l'option `nom` ? git accepte les abréviations non ambiguës des options longues (--no-verif…). */
 const est = (a, ...noms) => {
@@ -85,9 +89,14 @@ function analyserGit(args, cwd, env, ctx) {
     }
   }
   if (configs.some((c) => /hookspath/i.test(c))) return "les hooks git du dépôt ne se débranchent pas.";
-  if (configs.some((c) => /^alias\./i.test(c))) return "pas d'alias git à la volée : écris la commande en entier.";
+  if (configs.some((c) => /alias\./i.test(c))) return "pas d'alias git à la volée : écris la commande en entier.";
   const [sous, ...reste] = args.slice(i);
   if (!sous) return null;
+  const alias = ctx.alias(cwd, sous);
+  if (alias) {
+    if (alias.startsWith("!")) return `l'alias git « ${sous} » lance un shell : écris la commande en entier.`;
+    return analyserGit([...args.slice(0, i), ...commandes(alias)[0] ?? [], ...reste], cwd, env, { ...ctx, alias: () => null });
+  }
   const options = reste.filter((a) => a.startsWith("-"));
   const positionnels = reste.filter((a) => !a.startsWith("-"));
   if (reste.some((a) => est(a, "--no-verify"))) return "--no-verify est interdit : corrige ce que le hook signale.";
@@ -103,7 +112,7 @@ function analyserGit(args, cwd, env, ctx) {
       if (!installe) return "core.hooksPath reste sur .githooks.";
     }
     const valeur = pos[1];
-    if (modifie && cle?.startsWith("alias.") && /no-verify|hookspath|^!/i.test(pos.slice(1).join(" "))) return "cet alias git contournerait les hooks.";
+    if (modifie && cle?.startsWith("alias.")) return "pas de nouvel alias git : écris les commandes en entier.";
     if (modifie && ((cle === "user.name" && valeur !== OWNER) || (cle === "user.email" && valeur !== EMAIL))) return `les commits de ce dépôt sont signés ${OWNER} <${EMAIL}>.`;
     return null;
   }
@@ -129,6 +138,7 @@ function analyserGit(args, cwd, env, ctx) {
     const supprime = options.some((o) => o === "-d" || est(o, "--delete"));
     const branche = ctx.branche(cwd);
     const refs = positionnels.slice(1);
+    if (refs.some((x) => EXPANSION.test(x))) return "écris les refs à pousser en clair (pas de variable, d'accolade ni de joker).";
     if (!refs.length && branche === MAIN) return `${MAIN} ne reçoit que des PR mergées en squash.`;
     for (const ref of refs) {
       const cible = (ref.includes(":") ? ref.split(":")[1] || ref.split(":")[0] : ref).replace(/^\+/, "");
@@ -141,6 +151,7 @@ function analyserGit(args, cwd, env, ctx) {
   }
 
   if (sous === "tag") {
+    if (positionnels.some((x) => EXPANSION.test(x)) && !options.some((o) => ["-l", "--list"].includes(o))) return `${RELEASE}.`;
     const lecture = ["-l", "--list", "-n", "--contains", "--no-contains", "--points-at", "--merged", "--no-merged", "-v", "--verify"];
     const ecrit = options.some((o) => ["-d", "-a", "-s", "-f", "-m", "-F", "-u", "-e"].includes(o) || est(o, "--delete", "--annotate", "--sign", "--force", "--local-user", "--message", "--file", "--edit"));
     if (ecrit || (positionnels.length && !options.some((o) => lecture.includes(o.split("=")[0]) || /^-n\d*$/.test(o) || o.startsWith("--sort") || o.startsWith("--format")))) return `${RELEASE}.`;
@@ -165,15 +176,18 @@ function analyserGh(args, cwd, ctx) {
     if (reste.includes("--admin")) return "gh pr merge --admin est interdit : aucune exception aux règles de main.";
     if (reste.some((o) => ["--merge", "-m", "--rebase", "-r"].includes(o))) return "main se merge en squash uniquement (gh pr merge --squash).";
     if (!reste.some((o) => o === "--squash" || o === "-s")) return "précise --squash : main se merge en squash uniquement.";
+    if (reste.some((o) => o === "--auto")) return "pas de --auto : la PR se merge une fois sa CI vue, avec --match-head-commit.";
     let pr;
     for (let k = 0; k < reste.length; k++) {
       if (/^(-t|--subject|-b|--body|-F|--body-file|-A|--author-email|--match-head-commit|-R|--repo)$/.test(reste[k])) k++;
       else if (!reste[k].startsWith("-")) pr ??= reste[k];
     }
-    const fichiers = ctx.fichiersPr(pr, cwd);
-    if (!fichiers) return "impossible de lire les fichiers de la PR (gh pr diff) : merge refusé par prudence.";
-    const regles = fichiers.filter((f) => FICHIERS_REGLES.test(f));
+    const etat = ctx.pr(pr, valeur("-R", "--repo"), cwd);
+    if (!etat) return "impossible de lire la PR (gh pr view) : merge refusé par prudence.";
+    const regles = etat.files.filter((f) => FICHIERS_REGLES.test(f));
     if (regles.length) return `cette PR change les règles du dépôt (${regles.join(", ")}) : c'est à l'utilisateur de la merger sur github.com.`;
+    // La tête vérifiée doit être celle qui sera mergée.
+    if (valeur("--match-head-commit") !== etat.head) return `ajoute --match-head-commit ${etat.head} : la PR est mergée telle qu'elle vient d'être vérifiée.`;
     return null;
   }
   if (groupe === "pr" && (action === "create" || action === "edit")) {
@@ -213,9 +227,18 @@ function analyserGh(args, cwd, ctx) {
 
 const ECRIVAINS = new Set(["rm", "mv", "cp", "install", "chmod", "chflags", "ln", "unlink", "truncate", "tee", "touch", "dd", "rsync"]);
 
-const fichiersPr = (pr, cwd) => {
+/** Tête et fichiers d'une PR, lus ensemble. */
+const lirePr = (pr, repo, cwd) => {
   try {
-    return execFileSync("gh", ["pr", "diff", ...(pr ? [pr] : []), "--name-only"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split("\n").filter(Boolean);
+    const v = JSON.parse(execFileSync("gh", ["pr", "view", ...(pr ? [pr] : []), ...(repo ? ["--repo", repo] : []), "--json", "headRefOid,files"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+    return { head: v.headRefOid, files: v.files.map((f) => f.path) };
+  } catch {
+    return null;
+  }
+};
+const aliasGit = (cwd, nom) => {
+  try {
+    return execFileSync("git", ["-C", cwd, "config", "--get", `alias.${nom}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
   } catch {
     return null;
   }
@@ -225,8 +248,9 @@ const fichiersPr = (pr, cwd) => {
  * Raison du refus de la commande Bash, ou null si elle passe.
  * `ctx` remplace l'état réel du dépôt dans les tests (hooks actifs, branche courante).
  */
-export function analyser(ligne, cwd = process.cwd(), ctx = {}) {
-  ctx = { hooks: (dir) => !!dossierHooks(dir), branche: brancheDe, fichiersPr, ...ctx };
+export function analyser(ligne, cwd = process.cwd(), ctx = {}, profondeur = 0) {
+  if (profondeur > 4) return "commande trop imbriquée pour être vérifiée : simplifie-la.";
+  ctx = { hooks: (dir) => !!dossierHooks(dir), branche: brancheDe, pr: lirePr, alias: aliasGit, ...ctx };
   for (const mots of commandes(ligne)) {
     const env = [];
     let k = 0;
@@ -261,13 +285,22 @@ export function analyser(ligne, cwd = process.cwd(), ctx = {}) {
       if (e >= 0) imbriquee = args.slice(e + 1).filter((x) => x !== ";" && x !== "+" && x !== "{}").join(" ");
     }
     if (imbriquee) {
-      const raison = analyser(imbriquee, cwd, ctx);
+      const raison = analyser(imbriquee, cwd, ctx, profondeur + 1);
       if (raison) return raison;
     }
     if (INTERPRETES.has(nom)) {
       const code = args.filter((_, j) => j > 0 && /^(-e|-c|-p|--eval|--print)$/.test(args[j - 1])).join(" ");
       if (/\b(git|gh)\b/.test(code) && /no-verify|hookspath|push|commit|merge|\btag\b|release|\bapi\b|ruleset/i.test(code)) {
         return "git ou gh lancé depuis du code en ligne : lance la commande directement, pour qu'elle soit vérifiée.";
+      }
+    }
+    if (LANCEURS.has(nom)) {
+      const j = args.findIndex((x) => ["git", "gh"].includes(x.split("/").pop()));
+      if (j >= 0) {
+        if (args.slice(0, j).some((x) => /hookspath|alias\./i.test(x))) return "les hooks git du dépôt ne se débranchent pas.";
+        const raison = analyser(args.slice(j).map((x) => (/[\s'"]/.test(x) ? `'${x.replace(/'/g, "'\\''")}'` : x)).join(" "), cwd, ctx, profondeur + 1);
+        if (raison) return raison;
+        continue;
       }
     }
     const raison = nom === "git" ? analyserGit(args, cwd, env, ctx) : nom === "gh" ? analyserGh(args, cwd, ctx) : null;
@@ -287,7 +320,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   const commande = entree?.tool_input?.command;
   if (typeof commande !== "string") process.exit(0);
-  const raison = analyser(commande, entree.cwd || process.cwd());
+  let raison;
+  try {
+    raison = analyser(commande, entree.cwd || process.cwd());
+  } catch (e) {
+    raison = `vérification impossible (${e.message}) : commande refusée par prudence.`;
+  }
   if (raison) {
     console.error(`Règle du dépôt : ${raison}`);
     process.exit(2);

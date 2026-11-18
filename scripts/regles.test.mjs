@@ -41,7 +41,7 @@ test("découpage des commandes shell", () => {
 });
 
 // État simulé : hooks actifs, sur une branche de travail.
-const ctx = { hooks: () => true, branche: () => "feat/x", fichiersPr: () => ["src/main.ts"] };
+const ctx = { hooks: () => true, branche: () => "feat/x", alias: () => null, pr: () => ({ head: "abc123", files: ["src/main.ts"] }) };
 
 test("garde-fou : contournements refusés", () => {
   for (const cmd of [
@@ -116,13 +116,25 @@ test("garde-fou : contournements refusés", () => {
     "gh api -X PUT repos/Kwickos/better-harness/pulls/3/merge",
     "gh api graphql -f query='mutation { mergePullRequest(input:{}) { clientMutationId } }'",
     "gh workflow disable regles.yml",
-    "gh pr merge 4 --squash --auto",
+    "gh pr merge 4 --squash --auto --match-head-commit abc123",
+    "gh pr merge 4 --squash",
+    "gh pr merge 4 --squash --match-head-commit autre",
+    "git config alias.st status",
+    "git -c alias.x=status x",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.ci GIT_CONFIG_VALUE_0=x git ci",
+    "git push origin {main,feat/x}",
+    "git push origin $CIBLE",
+    "B=v1.0.0; git tag $B",
+    "sudo -u moi git push origin main",
+    "env -i git push origin main",
+    "env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/tmp git commit -m x",
+    "time git push origin main",
+    "command git push origin main",
+    "nice -n 5 git commit --no-verify -m x",
+    "timeout -k 5 30 git push origin main",
+    "echo x > scripts/regles.mjs",
+    "eval eval eval eval eval eval git push origin main",
   ]) {
-    const regles = { ...ctx, fichiersPr: () => ["scripts/regles.mjs", "src/main.ts"] };
-    if (cmd.includes("--auto")) {
-      assert.notEqual(analyser(cmd, "/depot", regles), null, cmd);
-      continue;
-    }
     assert.notEqual(analyser(cmd, "/depot", ctx), null, cmd);
   }
 });
@@ -143,8 +155,8 @@ test("garde-fou : travail normal autorisé", () => {
     "git config core.hooksPath .githooks",
     "git config user.name Kwickos",
     "gh pr create --title 'feat: canal bêta' --body 'x'",
-    "gh pr merge 3 --squash",
-    "gh pr merge 3 -s --auto",
+    "gh pr merge 3 --squash --match-head-commit abc123",
+    "gh pr merge 3 -s --match-head-commit=abc123",
     "gh pr checks 3",
     "gh release list",
     "gh release view v0.1.0",
@@ -159,7 +171,6 @@ test("garde-fou : travail normal autorisé", () => {
     "bash -c 'git status && git log -1'",
     "node -e 'console.log(1)'",
     "echo ok > /tmp/x",
-    "git config alias.st status",
     "find . -name '*.mjs' -exec grep -l regles {} +",
   ]) {
     assert.equal(analyser(cmd, "/depot", ctx), null, cmd);
@@ -177,10 +188,15 @@ test("garde-fou : état du dépôt", () => {
   assert.equal(analyser("git status", "/depot", sansHooks), null);
 });
 
-test("garde-fou : PR illisible ou qui touche aux règles", () => {
-  assert.notEqual(analyser("gh pr merge 2 --squash", "/depot", { ...ctx, fichiersPr: () => [".github/workflows/regles.yml"] }), null);
-  assert.notEqual(analyser("gh pr merge --squash", "/depot", { ...ctx, fichiersPr: () => null }), null);
+test("garde-fou : PR illisible ou qui touche aux règles, alias", () => {
+  const m = "gh pr merge 2 --squash --match-head-commit abc123";
+  assert.notEqual(analyser(m, "/depot", { ...ctx, pr: () => ({ head: "abc123", files: [".github/workflows/regles.yml"] }) }), null);
+  assert.notEqual(analyser(m, "/depot", { ...ctx, pr: () => null }), null);
   let demande;
-  analyser("gh pr merge -s https://github.com/Kwickos/better-harness/pull/7 -t titre", "/depot", { ...ctx, fichiersPr: (pr) => ((demande = pr), []) });
-  assert.equal(demande, "https://github.com/Kwickos/better-harness/pull/7");
+  analyser("gh pr merge -s https://github.com/Kwickos/better-harness/pull/7 -t titre -R Kwickos/better-harness", "/depot", { ...ctx, pr: (pr, repo) => ((demande = [pr, repo]), { head: "x", files: [] }) });
+  assert.deepEqual(demande, ["https://github.com/Kwickos/better-harness/pull/7", "Kwickos/better-harness"]);
+  const alias = (def) => ({ ...ctx, alias: (_, nom) => (nom === "ci" ? def : null) });
+  assert.notEqual(analyser("git ci -m x", "/depot", alias("commit --no-verify")), null);
+  assert.notEqual(analyser("git ci", "/depot", alias("!sh -c x")), null);
+  assert.equal(analyser("git ci -m x", "/depot", alias("commit")), null);
 });

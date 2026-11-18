@@ -24,8 +24,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - run: node --test scripts/regles.test.mjs
-      # Les règles appliquées sont celles de main : une PR ne peut pas assouplir le contrôle qui la juge.
+      # Aucun code de la PR ne s'exécute ici : les règles appliquées sont celles de main
+      # (les tests de la PR tournent dans le job web).
       # (Première PR seulement : main n'a pas encore le fichier, on prend celui de la PR.)
       - name: Règles de main appliquées à la PR
         run: |
