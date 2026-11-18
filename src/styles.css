@@ -204,6 +204,7 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .thread:hover .thread-more, .thread-more[aria-expanded="true"] { display: grid; }
 .thread:hover .thread-state, .thread:has(.thread-more[aria-expanded="true"]) .thread-state { transform: translateX(-26px); }
 .thread-more:hover, .thread-more[aria-expanded="true"] { color: var(--ink); }
+.thread-wt { display: grid; place-items: center; flex: none; margin-right: -3px; color: var(--ink-3); }
 .thread-state { display: grid; place-items: center; flex: none; color: var(--ink-3); transition: transform var(--duration-quick) var(--ease-smooth-out); }
 .thread-state.is-wait { color: var(--wait); }
 /* On a project header, only when collapsed: expanded, the conversation row already shows it. */
@@ -235,6 +236,8 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 #crumb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); }
 #crumb b { font-weight: 500; color: var(--ink); }
 .crumb-dir { margin-right: 8px; }
+.crumb-branch { margin-right: 8px; }
+.crumb-branch svg { display: inline-block; margin-right: 4px; vertical-align: -2px; }
 .bar-actions { display: flex; flex: none; align-items: center; gap: 2px; }
 
 #convo { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; }
@@ -472,6 +475,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .menu-btn .soft:empty { display: none; }
 .mode-icon:empty { display: none; }
 .mode-icon svg { width: 14px; height: 14px; }
+.menu-btn.is-busy .mode-icon svg { animation: spin 1s steps(8) infinite; }
 #mode-btn[data-mode="bypassPermissions"] { color: var(--bad); }
 .ctx-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; }
 .ctx-btn:hover, .ctx-btn[aria-expanded="true"] { background: var(--fill); }

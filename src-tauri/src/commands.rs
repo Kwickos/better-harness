@@ -1,6 +1,6 @@
 use crate::events::{MetricsSnapshot, SessionInfo, UiEvent};
 use crate::history::{self, HistoryEntry};
-use crate::hub::{CreateOpts, Hub};
+use crate::hub::{CreateOpts, Hub, KeptWorktree};
 use crate::i18n::tr;
 use crate::mcp::{self, McpEntry};
 use crate::metrics::Metrics;
@@ -23,8 +23,8 @@ pub fn list_sessions(hub: H<'_>) -> Vec<SessionInfo> {
 }
 
 #[tauri::command]
-pub fn create_session(hub: H<'_>, opts: CreateOpts) -> Result<SessionInfo, String> {
-    hub.create(opts)
+pub async fn create_session(hub: H<'_>, opts: CreateOpts) -> Result<SessionInfo, String> {
+    hub.inner().clone().create_session(opts).await
 }
 
 #[tauri::command]
@@ -94,13 +94,35 @@ pub async fn list_archived(hub: H<'_>) -> Result<Vec<HistoryEntry>, String> {
 }
 
 #[tauri::command]
-pub fn set_archived(hub: H<'_>, cli_id: String, archived: bool) -> Result<(), String> {
-    hub.set_archived(&cli_id, archived)
+pub async fn set_archived(hub: H<'_>, cli_id: String, archived: bool) -> Result<Option<KeptWorktree>, String> {
+    hub.set_archived(&cli_id, archived).await
 }
 
 #[tauri::command]
-pub async fn delete_conversation(hub: H<'_>, cli_id: String) -> Result<(), String> {
+pub async fn delete_conversation(hub: H<'_>, cli_id: String) -> Result<Option<KeptWorktree>, String> {
     hub.delete_conversation(&cli_id).await
+}
+
+// ---------------------------------------------------------------- worktrees
+
+#[tauri::command]
+pub fn list_worktrees(hub: H<'_>) -> Vec<crate::worktree::Worktree> {
+    hub.worktrees()
+}
+
+#[tauri::command]
+pub async fn worktree_states(hub: H<'_>) -> Result<Vec<crate::worktree::WorktreeState>, String> {
+    Ok(hub.worktree_states().await)
+}
+
+#[tauri::command]
+pub async fn remove_worktree(hub: H<'_>, path: String) -> Result<(), String> {
+    hub.remove_worktree(&path).await
+}
+
+#[tauri::command]
+pub async fn git_branches(cwd: String) -> Result<crate::worktree::Branches, String> {
+    crate::worktree::branches(crate::shellenv::path().await, &cwd).await
 }
 
 #[derive(Serialize)]

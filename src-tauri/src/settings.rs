@@ -33,6 +33,10 @@ pub struct Settings {
     pub recent_dirs: Vec<String>,
     /// Interface language: "en" (default), "fr", or "system" (macOS preferred languages).
     pub language: String,
+    /// Worktree branches are named `<prefix>/<name>`.
+    pub worktree_prefix: String,
+    /// New conversations in a git repository start in their own worktree.
+    pub worktree_default: bool,
     /// "stable" (default) or "beta": beta also receives the pre-releases.
     pub update_channel: String,
 }
@@ -59,6 +63,8 @@ impl Default for Settings {
             all_tools: false,
             recent_dirs: vec![],
             language: "en".into(),
+            worktree_prefix: "claude".into(),
+            worktree_default: false,
             update_channel: "stable".into(),
         }
     }

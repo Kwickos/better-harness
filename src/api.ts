@@ -120,6 +120,41 @@ export interface GitStatus {
   truncated: boolean;
 }
 
+/** A conversation's worktree (src-tauri/src/worktree.rs): `<repo>/.claude/worktrees/<name>`, on its own branch. */
+export interface Worktree {
+  path: string;
+  /** Main checkout of the repository. */
+  repo: string;
+  branch: string;
+  /** Branch (or commit) it started from. */
+  base: string;
+  baseCommit: string;
+  createdMs: number;
+}
+
+export interface WorktreeState extends Worktree {
+  exists: boolean;
+  /** Uncommitted changes, untracked files included. */
+  dirty: number;
+  /** Commits made on the branch since the worktree was created. */
+  commits: number;
+}
+
+/** A worktree left on disk after its conversation went: it has uncommitted changes. */
+export interface KeptWorktree {
+  path: string;
+  branch: string;
+  dirty: number;
+}
+
+export interface Branches {
+  isRepo: boolean;
+  hasHead: boolean;
+  current: string | null;
+  /** Local branches, most recently used first. */
+  list: string[];
+}
+
 export interface GitDiff {
   text: string;
   truncated: boolean;
@@ -171,7 +206,8 @@ export type UiEvent =
   | { kind: "serverLog"; key: string; lines: string[] }
   | { kind: "browser"; url: string; loading: boolean }
   | { kind: "artifactReady" }
-  | { kind: "simulator"; udid: string; state: "ready" | "no-input" | "error" | "ended" | "agent"; message: string | null };
+  | { kind: "simulator"; udid: string; state: "ready" | "no-input" | "error" | "ended" | "agent"; message: string | null }
+  | { kind: "worktrees"; list: Worktree[] };
 
 export interface HistoryEntry {
   cliId: string;
@@ -217,6 +253,10 @@ export interface Settings {
   recentDirs: string[];
   /** "en" (default), "fr" or "system" (src/i18n.ts). */
   language: string;
+  /** Worktree branches are named `<prefix>/<name>`. */
+  worktreePrefix: string;
+  /** New conversations in a git repository start in their own worktree. */
+  worktreeDefault: boolean;
   /** beta also receives the pre-releases (src-tauri/src/updates.rs). */
   updateChannel: "stable" | "beta";
 }
@@ -250,6 +290,8 @@ export interface CreateOpts {
   title?: string | null;
   effort?: string | null;
   advisor?: string | null;
+  /** Start in a new worktree. `base`: branch to start from (the folder's current one by default); `hint`: the first message, which names it. */
+  worktree?: { base?: string | null; hint?: string | null } | null;
 }
 
 export const tauriApi = {
@@ -281,8 +323,16 @@ export const tauriApi = {
   gitDiff: (cwd: string, path: string) => invoke<GitDiff>("git_diff", { cwd, path }),
   gitDiscard: (cwd: string, path: string) => invoke<void>("git_discard", { cwd, path }),
   listArchived: () => invoke<HistoryEntry[]>("list_archived"),
-  setArchived: (cliId: string, archived: boolean) => invoke<void>("set_archived", { cliId, archived }),
-  deleteConversation: (cliId: string) => invoke<void>("delete_conversation", { cliId }),
+  /** The worktree kept on disk when it has uncommitted changes. */
+  setArchived: (cliId: string, archived: boolean) => invoke<KeptWorktree | null>("set_archived", { cliId, archived }),
+  deleteConversation: (cliId: string) => invoke<KeptWorktree | null>("delete_conversation", { cliId }),
+  gitBranches: (cwd: string) => invoke<Branches>("git_branches", { cwd }),
+  listWorktrees: () => invoke<Worktree[]>("list_worktrees"),
+  /** Worktrees still on disk, with their changes. */
+  worktreeStates: () => invoke<WorktreeState[]>("worktree_states"),
+  /** Closes its conversations; the uncommitted changes go to the Trash. */
+  removeWorktree: (path: string) => invoke<void>("remove_worktree", { path }),
+  copyText: (text: string) => invoke<void>("copy_text", { text }),
   loadTranscript: (sid: string, cliId: string, limit: number) =>
     invoke<{ events: UiEvent[]; hasMore: boolean }>("load_transcript", { sid, cliId, limit }),
   listMcp: (cwd: string) => invoke<McpEntry[]>("list_mcp", { cwd }),
