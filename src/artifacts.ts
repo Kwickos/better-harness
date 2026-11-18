@@ -143,7 +143,7 @@ export function initArtifactTab(d: Deps) {
     const artifact = current();
     if (artifact) d.openExternal(artifact.url);
   });
-  $("art-external").before(copyButton(() => current()?.url ?? "", t("Copy link"), "art-copy"));
+  $("art-external").before(copyButton(() => current()?.url ?? "", "Copy link", "art-copy"));
 
   const del = $<HTMLButtonElement>("art-delete");
   del.addEventListener("click", () => {

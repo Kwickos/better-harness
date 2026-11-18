@@ -1,8 +1,8 @@
-import { fmtMb, fmtNumber, lang, setLang, t, tp, translateDom } from "./i18n";
+import { fmtMb, fmtNumber, lang, onLangChange, setLang, t, tp, translateDom } from "./i18n";
 import "./errors";
 import { tauriApi, type UpdateState, type UsageWindows, type Api, type ContextUsage, type HistoryEntry, type PermissionEv, type ProcStat, type SessionInfo, type Settings, type UiEvent } from "./api";
 import { icon, type IconName } from "./icons";
-import { DELETE_NOTE, effectiveEffort, effortLabel, effortLevels, isCurrentModel, MODES, modeOf, modelChoices, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
+import { deleteNote, effectiveEffort, effortLabel, effortLevels, isCurrentModel, modes, modeOf, modelChoices, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
 import { closeMenu, confirmMenu, menuElement, menuItem, onMenuChange, segmented, showMenu, type MenuEntry } from "./menu";
 import { animateOut, DUR, enter, flipY, goLive, heightIn, heightOut, iconIn, leave, motionLive, swapText, textIn } from "./motion";
 import { initComposer } from "./composer";
@@ -59,8 +59,8 @@ const attachmentsUi = initAttachments({ api, guard, reveal, overlayChanged: () =
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const home = (p: string) => (appHome && p.startsWith(appHome) ? `~${p.slice(appHome.length)}` : p);
-const NO_FOLDER = t("No folder");
-const projectName = (cwd: string) => (cwd === scratchDir ? NO_FOLDER : base(cwd));
+const noFolder = () => t("No folder");
+const projectName = (cwd: string) => (cwd === scratchDir ? noFolder() : base(cwd));
 
 let toastTimer = 0;
 function toast(text: string) {
@@ -603,7 +603,7 @@ function threadMenu(thread: Thread, anchor: HTMLElement) {
     anchor,
     [
       { label: t("Archive"), icon: "archive", run: () => (busy ? confirmMenu(anchor, t("Claude is replying"), t("Archiving stops its reply."), t("Archive"), archive) : archive()) },
-      { label: t("Delete"), icon: "trash", danger: true, run: () => confirmMenu(anchor, t("Delete this conversation?"), DELETE_NOTE, t("Delete"), remove) },
+      { label: t("Delete"), icon: "trash", danger: true, run: () => confirmMenu(anchor, t("Delete this conversation?"), deleteNote(), t("Delete"), remove) },
     ],
     opts,
   );
@@ -685,7 +685,7 @@ function setShown(button: HTMLElement, shown: boolean) {
 
 function renderComposer() {
   const v = activeView();
-  swapText($("folder-name"), draft.cwd ? base(draft.cwd) : NO_FOLDER);
+  swapText($("folder-name"), draft.cwd ? base(draft.cwd) : noFolder());
   setIcon($("folder-icon"), draft.cwd ? "folder" : "folderDashed");
   $("folder-btn").title = draft.cwd ? home(draft.cwd) : "";
   const modelId = v ? v.info.model : draft.model;
@@ -785,7 +785,7 @@ function fmtReset(seconds: number) {
 
 // Read from the model's responses (`rate_limit_event`), so no extra request. It applies to the
 // whole account: the last known value is kept from one launch to the next.
-const USAGE_LABELS: Record<string, string> = { five_hour: t("5 hours"), seven_day: t("Week") };
+const usageLabels = (): Record<string, string> => ({ five_hour: t("5 hours"), seven_day: t("Week") });
 let usage: UsageWindows = {};
 try {
   usage = JSON.parse(localStorage.getItem("bh.usage") ?? "{}") as UsageWindows;
@@ -795,12 +795,13 @@ try {
 let usageTimer = 0;
 
 function usageRows() {
-  return Object.keys(USAGE_LABELS)
+  const labels = usageLabels();
+  return Object.keys(labels)
     .filter((k) => usage[k])
     .map((k) => {
       const w = usage[k];
       const expired = w.resetsAt * 1000 <= Date.now();
-      return { label: USAGE_LABELS[k], resetsAt: w.resetsAt, expired, left: expired ? 100 : Math.max(0, Math.round((1 - w.utilization) * 100)) };
+      return { label: labels[k], resetsAt: w.resetsAt, expired, left: expired ? 100 : Math.max(0, Math.round((1 - w.utilization) * 100)) };
     });
 }
 
@@ -917,7 +918,7 @@ $("model-btn").addEventListener("click", (e) => {
 $("mode-btn").addEventListener("click", (e) => {
   const v = activeView();
   const cur = v ? v.info.permissionMode : draft.mode;
-  showMenu(e.currentTarget as HTMLElement, MODES.map((m) => ({ label: m.label, icon: m.icon, checked: m.id === cur, danger: m.id === "bypassPermissions", run: () => pick("mode", m.id) })), { place: "above", minWidth: 210 });
+  showMenu(e.currentTarget as HTMLElement, modes().map((m) => ({ label: m.label, icon: m.icon, checked: m.id === cur, danger: m.id === "bypassPermissions", run: () => pick("mode", m.id) })), { place: "above", minWidth: 210 });
 });
 
 function knownDirs(): string[] {
@@ -957,7 +958,7 @@ $("folder-btn").addEventListener("click", (e) => {
     const rows = dirs.filter((d) => !needle || d.toLowerCase().includes(needle)).map((d) =>
       menuItem({ label: base(d), detail: (names.get(base(d)) ?? 0) > 1 ? parent(d) : undefined, title: home(d), icon: "folder", checked: d === draft.cwd, run: () => setDraftCwd(d) }),
     );
-    if (!needle || NO_FOLDER.toLowerCase().includes(needle)) rows.unshift(menuItem({ label: NO_FOLDER, icon: "folderDashed", checked: !draft.cwd, run: () => setDraftCwd("") }));
+    if (!needle || noFolder().toLowerCase().includes(needle)) rows.unshift(menuItem({ label: noFolder(), icon: "folderDashed", checked: !draft.cwd, run: () => setDraftCwd("") }));
     list.replaceChildren(...(rows.length ? rows : [el("div", "menu-note", t("No folders found."))]));
   };
   fill("");
@@ -1032,7 +1033,7 @@ function renderPerms() {
   renderWorking();
 }
 
-const PERM_VERBS: Record<string, string> = {
+const permVerbs = (): Record<string, string> => ({
   [SIM_TOOL]: t("Simulator"),
   Artifact: t("Artifact"),
   Bash: t("Run"),
@@ -1048,7 +1049,7 @@ const PERM_VERBS: Record<string, string> = {
   Task: t("Start an agent"),
   ExitPlanMode: t("Approve plan"),
   Agent: t("Start an agent"),
-};
+});
 
 /**
  * What the action is about, in one line: command, file name, address…
@@ -1106,7 +1107,7 @@ function permBar(v: SessionView, p: PermissionEv): HTMLElement {
   main.setAttribute("aria-expanded", "false");
   const chev = el("span", "perm-chev");
   chev.innerHTML = icon("chevronRight");
-  main.append(el("span", "perm-verb", PERM_VERBS[p.toolName] ?? p.toolName.replace(/^mcp__/, "").replace(/__/g, " ")), el("code", "perm-target", target), chev);
+  main.append(el("span", "perm-verb", permVerbs()[p.toolName] ?? p.toolName.replace(/^mcp__/, "").replace(/__/g, " ")), el("code", "perm-target", target), chev);
 
   const detail = el("div", "perm-detail");
   detail.hidden = true;
@@ -1477,10 +1478,21 @@ document.addEventListener("visibilitychange", () => void api.setVisible(!documen
 async function boot() {
   await api.subscribe(onEvent);
   settings = await api.getSettings();
-  // The language cached by i18n.ts was out of date (settings edited elsewhere): reload in the right one.
-  if (setLang(settings.language)) return void window.location.reload();
+  setLang(settings.language);
   translateDom();
   void api.setLanguage(lang()).catch(() => undefined);
+  // Language switched in Settings: everything on screen is redrawn in place, no reload.
+  onLangChange(() => {
+    void api.setLanguage(lang()).catch(() => undefined);
+    sidebarKey = "";
+    renderSidebar();
+    renderMain();
+    renderContext();
+    renderUsage();
+    renderUpdate(updateState);
+    renderPerms();
+    renderer.refresh();
+  });
   scratchDir = await api.scratchDir().catch(() => "");
   // `app_info` runs `claude --version`: boot doesn't wait for it.
   void api.appInfo().then((i) => {

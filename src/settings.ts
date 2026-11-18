@@ -1,15 +1,15 @@
 // Settings: a panel with sections, saved automatically on every change.
 import type { Api, Settings, UpdateState } from "./api";
 import { icon } from "./icons";
-import { DELETE_NOTE, EFFORTS, MODES, effortLabel, modeOf, modelChoices, prettyModel } from "./labels";
+import { deleteNote, efforts, modes, effortLabel, modeOf, modelChoices, prettyModel } from "./labels";
 import { setWorldShown, worldShown } from "./world";
 import { confirmMenu, showMenu, type MenuEntry } from "./menu";
 import { animateOut, enter } from "./motion";
 import { el } from "./transcript";
-import { LANGUAGES, fmtMb, setLang, t, tp } from "./i18n";
+import { LANGUAGES, fmtMb, onLangChange, setLang, t, tp } from "./i18n";
 
 type Section = "general" | "perf" | "mcp" | "archives" | "about";
-const TITLES: Record<Section, string> = { general: t("General"), perf: t("Performance"), mcp: t("MCP servers"), archives: t("Archives"), about: t("About") };
+const titles = (): Record<Section, string> => ({ general: t("General"), perf: t("Performance"), mcp: t("MCP servers"), archives: t("Archives"), about: t("About") });
 
 interface Deps {
   api: Api;
@@ -28,7 +28,7 @@ export function initSettings(d: Deps) {
   let section: Section = "general";
   let saveTimer = 0;
   let savedTimer = 0;
-  /** Runs once the pending save has succeeded (the language reloads the window only then). */
+  /** Runs once the pending save has succeeded (the language switches only then). */
   let afterSave: (() => void) | null = null;
 
   function save(patch: Partial<Settings>, then?: () => void) {
@@ -102,6 +102,9 @@ export function initSettings(d: Deps) {
 
   // ------------------------------------------------------------ sections
 
+  // Languages are named in themselves; "System" is a word of the interface.
+  const langLabel = (l?: (typeof LANGUAGES)[number]) => (l?.id === "system" ? t("System") : (l?.label ?? ""));
+
   async function renderGeneral(body: HTMLElement) {
     const language = s.language || "en";
     const path = el("input", "s-input");
@@ -116,12 +119,12 @@ export function initSettings(d: Deps) {
         null,
         row(
           t("Language"),
-          t("Reloads the window."),
-          picker(LANGUAGES.find((l) => l.id === language)?.label ?? language, () =>
+          null,
+          picker(langLabel(LANGUAGES.find((l) => l.id === language)) || language, () =>
             LANGUAGES.map((l) => ({
-              label: l.label,
+              label: langLabel(l),
               checked: language === l.id,
-              run: () => (save({ language: l.id }, () => setLang(l.id) && window.location.reload()), rerender()),
+              run: () => (save({ language: l.id }, () => setLang(l.id)), rerender()),
             })),
           ),
         ),
@@ -148,14 +151,14 @@ export function initSettings(d: Deps) {
           t("More effort: more thoughtful answers, but slower."),
           picker(effortLabel(s.defaultEffort) || t("Default"), () => [
             { label: t("Default"), checked: !s.defaultEffort, run: () => (save({ defaultEffort: null }), rerender()) },
-            ...EFFORTS.map((e) => ({ label: e.label, checked: s.defaultEffort === e.id, run: () => (save({ defaultEffort: e.id }), rerender()) })),
+            ...efforts().map((e) => ({ label: e.label, checked: s.defaultEffort === e.id, run: () => (save({ defaultEffort: e.id }), rerender()) })),
           ]),
         ),
         row(
           t("Permissions"),
           null,
           picker(modeOf(s.defaultPermissionMode).label, () =>
-            MODES.map((m) => ({ label: m.label, icon: m.icon, danger: m.id === "bypassPermissions", checked: s.defaultPermissionMode === m.id, run: () => (save({ defaultPermissionMode: m.id }), rerender()) })),
+            modes().map((m) => ({ label: m.label, icon: m.icon, danger: m.id === "bypassPermissions", checked: s.defaultPermissionMode === m.id, run: () => (save({ defaultPermissionMode: m.id }), rerender()) })),
           ),
         ),
       ),
@@ -251,7 +254,7 @@ export function initSettings(d: Deps) {
       del.title = t("Delete");
       del.setAttribute("aria-label", t("Delete {name}", { name: h.title }));
       del.innerHTML = icon("trash");
-      del.addEventListener("click", () => confirmMenu(del, t("Delete this conversation?"), DELETE_NOTE, t("Delete"), () => void changed(d.api.deleteConversation(h.cliId)), { align: "end" }));
+      del.addEventListener("click", () => confirmMenu(del, t("Delete this conversation?"), deleteNote(), t("Delete"), () => void changed(d.api.deleteConversation(h.cliId)), { align: "end" }));
       actions.append(restore, del);
       r.append(text, actions);
       return r;
@@ -315,9 +318,13 @@ export function initSettings(d: Deps) {
     await { general: renderGeneral, perf: renderPerf, mcp: renderMcp, archives: renderArchives, about: renderAbout }[section](frag);
     body.replaceChildren(...frag.childNodes);
     body.scrollTop = scroll;
-    $("s-title").textContent = TITLES[section];
+    $("s-title").textContent = titles()[section];
     for (const b of dlg.querySelectorAll<HTMLElement>(".snav")) b.setAttribute("aria-current", String(b.dataset.sec === section));
   }
+
+  onLangChange(() => {
+    if (dlg.open) void rerender();
+  });
 
   for (const b of dlg.querySelectorAll<HTMLElement>(".snav")) {
     b.addEventListener("click", () => {

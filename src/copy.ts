@@ -1,7 +1,7 @@
 // "Copy" button for code blocks, tool output, diffs and logs.
 // It is added after the Markdown is sanitized: DOMPurify forbids `button` in the model's text.
 import { invoke } from "@tauri-apps/api/core";
-import { t } from "./i18n";
+import { bindAttrs, t } from "./i18n";
 import { icon } from "./icons";
 import { iconIn } from "./motion";
 
@@ -35,12 +35,12 @@ async function writeClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function copyButton(getText: () => string, label = t("Copy"), extraClass = "code-copy"): HTMLButtonElement {
+/** `label` is the English text (translated here), so the button follows language changes. */
+export function copyButton(getText: () => string, label = "Copy", extraClass = "code-copy"): HTMLButtonElement {
   const b = document.createElement("button");
   b.type = "button";
   b.className = `icon-btn ${extraClass}`;
-  b.title = label;
-  b.setAttribute("aria-label", label);
+  bindAttrs(b, label);
   b.innerHTML = icon("copy", 14);
   let timer = 0;
   b.addEventListener("click", async (e) => {
@@ -55,8 +55,7 @@ export function copyButton(getText: () => string, label = t("Copy"), extraClass 
     iconIn(b.querySelector<HTMLElement>("svg"));
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
-      b.title = label;
-      b.setAttribute("aria-label", label);
+      bindAttrs(b, label);
       b.classList.remove("is-done", "is-failed");
       b.innerHTML = icon("copy", 14);
       iconIn(b.querySelector<HTMLElement>("svg"));

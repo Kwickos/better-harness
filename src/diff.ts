@@ -149,7 +149,7 @@ export function renderLines(lines: DiffLine[], truncated = false): HTMLElement {
   if (truncated || lines.length > MAX_LINES) box.append(el("div", "d-hunk", t("Diff truncated: too long to show in full.")));
   // What you want to reuse from a diff is the code it produces.
   const after = () => lines.filter((l) => l.kind === "add" || l.kind === "ctx").map((l) => l.text).join("\n");
-  return wrapWithCopy(box, after, t("Copy new code"));
+  return wrapWithCopy(box, after, "Copy new code");
 }
 
 export function countsLabel(added: number | null | undefined, removed: number | null | undefined): HTMLElement {

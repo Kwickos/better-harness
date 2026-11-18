@@ -331,7 +331,7 @@ export function initPanel(d: Deps) {
     pre.textContent = (logs.get(s.key) ?? []).join("\n");
     pre.scrollTop = pre.scrollHeight;
   }
-  $("logs-close").before(copyButton(() => $("logs").textContent ?? "", t("Copy log"), "sm"));
+  $("logs-close").before(copyButton(() => $("logs").textContent ?? "", "Copy log", "sm"));
   $("logs-close").addEventListener("click", () => {
     selected = null;
     renderServers();

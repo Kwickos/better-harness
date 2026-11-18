@@ -268,6 +268,20 @@ export class TranscriptRenderer {
     if (crossfade && view) void enter(this.itemsEl, { opacity: "0" });
   }
 
+  /** Redraws the conversation on screen (language change) and keeps the reading position. */
+  refresh() {
+    if (!this.view) return;
+    const { scrollTop } = this.scroller;
+    const stick = this.stick;
+    this.mount(this.view);
+    // mount() queues a scroll to the bottom: put the reader back where they were, after it.
+    if (!stick)
+      requestAnimationFrame(() => {
+        this.stick = false;
+        this.scroller.scrollTop = scrollTop;
+      });
+  }
+
   /**
    * Visible messages move to a layer that fades out while the new content appears:
    * there is never a frame where the area is empty. Only on-screen ones are moved, the rest is dropped.
@@ -428,7 +442,7 @@ export class TranscriptRenderer {
 
   private userActions(text: string): HTMLElement {
     const box = el("div", "msg-actions");
-    box.append(copyButton(() => text, t("Copy"), "msg-action"), this.action("pencil", t("Edit"), () => this.messageActions.edit(text)));
+    box.append(copyButton(() => text, "Copy", "msg-action"), this.action("pencil", t("Edit"), () => this.messageActions.edit(text)));
     return box;
   }
 
@@ -449,7 +463,7 @@ export class TranscriptRenderer {
       it.blocks
         .flatMap((b) => (b.t === "text" ? [b.text] : []))
         .join("\n\n");
-    box.append(copyButton(text, t("Copy"), "msg-action"));
+    box.append(copyButton(text, "Copy", "msg-action"));
     const question = this.previousUser(it);
     if (question !== null) box.append(this.action("reload", t("Retry"), () => this.messageActions.retry(question)));
     node.append(box);
