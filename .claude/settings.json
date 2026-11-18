@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/regles.mjs\" installer"
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/rules.mjs\" install"
           }
         ]
       }
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/garde-git.mjs\" || exit 2"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.mjs\" || exit 2"
           }
         ]
       }

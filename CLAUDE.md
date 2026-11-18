@@ -1,10 +1,11 @@
 # Better Harness
 
-Les règles du dépôt sont dans [CONTRIBUTING.md](CONTRIBUTING.md). Elles sont imposées par GitHub, et un hook bloque les commandes qui les contournent. En bref :
+The repository rules are in [CONTRIBUTING.md](CONTRIBUTING.md). GitHub enforces them, and a hook blocks the commands that get around them. In short:
 
-- Ne jamais committer ni pousser sur `main`. Travailler sur la branche de la session (`features/…`) ou sur une branche `<type>/<sujet>`.
-- Titre de PR : `<type>: <description>`, avec un type parmi feat, fix, perf, refactor, docs, test, build, ci, chore, revert. Il devient le commit de `main`.
-- Commits `Kwickos <Kwickos@users.noreply.github.com>`, sans `Co-authored-by`.
-- Merge en squash uniquement (`gh pr merge --squash`).
-- Ne pas toucher aux versions, aux tags ni aux releases : seul `npm run release` le fait, et seulement si l'utilisateur le demande.
-- Un refus de hook se corrige, il ne se contourne pas : pas de `--no-verify`, pas de changement de `core.hooksPath`.
+- Never commit or push to `main`. Work on the session's branch (`features/…`) or on a `<type>/<subject>` branch.
+- PR title: `<type>: <description>`, with a type among feat, fix, perf, refactor, docs, test, build, ci, chore, revert. It becomes the commit on `main`.
+- Commits by `Kwickos <Kwickos@users.noreply.github.com>`, without `Co-authored-by`.
+- Squash merge only (`gh pr merge --squash`).
+- Do not touch versions, tags or releases: only `npm run release` does it, and only when the user asks.
+- A hook refusal gets fixed, not bypassed: no `--no-verify`, no change to `core.hooksPath`.
+- Write code, comments, commits, PR titles and docs in English. User-visible UI strings go through `t()` in `src/i18n.ts`, with the French in `src/locales/fr.ts`. Rust messages the user sees use `tr(en, fr)` from `src-tauri/src/i18n.rs`; text sent to the model stays English.

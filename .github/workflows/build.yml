@@ -1,5 +1,5 @@
-# Build obligatoire avant tout merge dans main (exigé par le ruleset « main », scripts/protections.mjs).
-# Il ne publie rien : les releases restent faites depuis le Mac par Kwickos (npm run release).
+# Build required before any merge into main (by the "main" ruleset, scripts/protections.mjs).
+# It publishes nothing: releases are still made from the Mac by Kwickos (npm run release).
 name: Build
 
 on:
@@ -23,7 +23,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run test:regles
+      - run: npm run test:rules
       - run: npm run build
 
   rust:

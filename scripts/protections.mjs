@@ -1,21 +1,21 @@
 #!/usr/bin/env node
-// Protections GitHub du dépôt, versionnées ici : c'est la seule couche que rien ne contourne.
-// Aucun « bypass actor » : même le compte propriétaire passe par une PR.
+// The repository's GitHub protections, versioned here: the only layer nothing gets around.
+// No "bypass actor": even the owner account goes through a PR.
 //
-//   npm run protections            applique ce fichier tel qu'il est sur origin/main
-//   npm run protections:verifier   compare GitHub à ce fichier (la release l'exige)
+//   npm run protections          applies this file as it is on origin/main
+//   npm run protections:verify   compares GitHub with this file (the release requires it)
 
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { MAIN, PREFIXES, REPO } from "./regles.mjs";
+import { MAIN, PREFIXES, REPO } from "./rules.mjs";
 
-/** ID de l'app GitHub Actions : seuls ses checks valident les statuts requis. */
+/** ID of the GitHub Actions app: only its checks satisfy the required statuses. */
 const GITHUB_ACTIONS = 15368;
-/** Jobs de .github/workflows/regles.yml qui doivent réussir avant un merge. */
-export const CHECKS = ["regles", "web", "rust"];
+/** Jobs of .github/workflows/ (rules.yml, build.yml) that must succeed before a merge. */
+export const CHECKS = ["rules", "web", "rust"];
 
-export const REGLAGES = {
+export const SETTINGS = {
   allow_squash_merge: true,
   allow_merge_commit: false,
   allow_rebase_merge: false,
@@ -57,7 +57,7 @@ export const RULESETS = [
     ],
   },
   {
-    name: "noms de branche",
+    name: "branch names",
     target: "branch",
     enforcement: "active",
     bypass_actors: [],
@@ -67,7 +67,7 @@ export const RULESETS = [
     rules: [{ type: "creation" }],
   },
   {
-    name: "tags immuables",
+    name: "immutable tags",
     target: "tag",
     enforcement: "active",
     bypass_actors: [],
@@ -75,7 +75,7 @@ export const RULESETS = [
     rules: [{ type: "update" }, { type: "deletion" }],
   },
   {
-    name: "noms de tag",
+    name: "tag names",
     target: "tag",
     enforcement: "active",
     bypass_actors: [],
@@ -93,97 +93,97 @@ const api = (args, body) =>
     }) || "null",
   );
 
-/** `attendu` est-il contenu dans `reel` ? (GitHub ajoute ses propres champs par défaut.) */
-function contenu(attendu, reel) {
-  if (Array.isArray(attendu)) {
-    return Array.isArray(reel) && attendu.length === reel.length && attendu.every((a) => reel.some((r) => contenu(a, r)));
+/** Is `expected` contained in `actual`? (GitHub adds its own default fields.) */
+function contains(expected, actual) {
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && expected.length === actual.length && expected.every((e) => actual.some((a) => contains(e, a)));
   }
-  if (attendu && typeof attendu === "object") return !!reel && typeof reel === "object" && Object.entries(attendu).every(([k, v]) => contenu(v, reel[k]));
-  return attendu === reel;
+  if (expected && typeof expected === "object") return !!actual && typeof actual === "object" && Object.entries(expected).every(([k, v]) => contains(v, actual[k]));
+  return expected === actual;
 }
 
-/** Rulesets de GitHub en détail. Un ruleset se retrouve par son nom, ou par sa cible s'il a été renommé. */
-function rulesetsGithub() {
+/** GitHub's rulesets in detail. A ruleset is found by its name, or by its target if it was renamed. */
+function githubRulesets() {
   const details = api([`repos/${REPO}/rulesets`, "--paginate"]).map((r) => api([`repos/${REPO}/rulesets/${r.id}`]));
-  return (attendu) =>
-    details.find((r) => r.name === attendu.name) ??
-    details.find((r) => r.target === attendu.target && contenu(attendu.conditions, r.conditions) && !RULESETS.some((a) => a.name === r.name));
+  return (expected) =>
+    details.find((r) => r.name === expected.name) ??
+    details.find((r) => r.target === expected.target && contains(expected.conditions, r.conditions) && !RULESETS.some((e) => e.name === r.name));
 }
 
-/** Écarts entre GitHub et ce fichier (vide si tout est en place). */
-export function verifier() {
-  const ecarts = [];
+/** Differences between GitHub and this file (empty when everything is in place). */
+export function verify() {
+  const gaps = [];
   const repo = api([`repos/${REPO}`]);
-  for (const [cle, valeur] of Object.entries(REGLAGES)) if (repo[cle] !== valeur) ecarts.push(`réglage ${cle} = ${repo[cle]} (attendu ${valeur})`);
-  if (repo.default_branch !== MAIN) ecarts.push(`branche par défaut ${repo.default_branch} (attendu ${MAIN})`);
-  if (!api([`repos/${REPO}/immutable-releases`]).enabled) ecarts.push("releases immuables désactivées");
-  const trouver = rulesetsGithub();
-  for (const attendu of RULESETS) {
-    const reel = trouver(attendu);
-    if (!reel) {
-      ecarts.push(`ruleset « ${attendu.name} » absent`);
+  for (const [key, value] of Object.entries(SETTINGS)) if (repo[key] !== value) gaps.push(`setting ${key} = ${repo[key]} (expected ${value})`);
+  if (repo.default_branch !== MAIN) gaps.push(`default branch ${repo.default_branch} (expected ${MAIN})`);
+  if (!api([`repos/${REPO}/immutable-releases`]).enabled) gaps.push("immutable releases off");
+  const find = githubRulesets();
+  for (const expected of RULESETS) {
+    const actual = find(expected);
+    if (!actual) {
+      gaps.push(`ruleset "${expected.name}" missing`);
       continue;
     }
-    if (reel.name !== attendu.name) ecarts.push(`ruleset « ${reel.name} » à renommer en « ${attendu.name} »`);
-    if (reel.enforcement !== "active") ecarts.push(`ruleset « ${attendu.name} » : ${reel.enforcement} (attendu active)`);
-    if (reel.bypass_actors?.length) ecarts.push(`ruleset « ${attendu.name} » : ${reel.bypass_actors.length} exception(s) de contournement`);
-    if (reel.target !== attendu.target || !contenu(attendu.conditions, reel.conditions)) ecarts.push(`ruleset « ${attendu.name} » : cible modifiée`);
-    for (const regle of attendu.rules) {
-      const r = reel.rules.find((x) => x.type === regle.type);
-      if (!r || !contenu(regle.parameters ?? {}, r.parameters ?? {})) ecarts.push(`ruleset « ${attendu.name} » : règle ${regle.type} absente ou modifiée`);
+    if (actual.name !== expected.name) gaps.push(`ruleset "${actual.name}" to rename to "${expected.name}"`);
+    if (actual.enforcement !== "active") gaps.push(`ruleset "${expected.name}": ${actual.enforcement} (expected active)`);
+    if (actual.bypass_actors?.length) gaps.push(`ruleset "${expected.name}": ${actual.bypass_actors.length} bypass exception(s)`);
+    if (actual.target !== expected.target || !contains(expected.conditions, actual.conditions)) gaps.push(`ruleset "${expected.name}": target changed`);
+    for (const rule of expected.rules) {
+      const r = actual.rules.find((x) => x.type === rule.type);
+      if (!r || !contains(rule.parameters ?? {}, r.parameters ?? {})) gaps.push(`ruleset "${expected.name}": rule ${rule.type} missing or changed`);
     }
   }
-  return ecarts;
+  return gaps;
 }
 
-function appliquer() {
+function apply() {
   const git = (...a) => execFileSync("git", a, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   git("fetch", "--quiet", "origin", MAIN);
-  // Seule la version mergée fait foi : une branche ne peut pas affaiblir les protections.
-  // Exception : la toute première installation, quand main n'a pas encore ce fichier.
-  const fichiers = ["scripts/protections.mjs", "scripts/regles.mjs"];
-  let premiere = false;
+  // Only the merged version counts: a branch cannot weaken the protections.
+  // Exception: the very first install, when main does not have this file yet.
+  const files = ["scripts/protections.mjs", "scripts/rules.mjs"];
+  let first = false;
   try {
     git("cat-file", "-e", `origin/${MAIN}:scripts/protections.mjs`);
   } catch {
-    premiere = true;
+    first = true;
   }
-  if (!premiere) {
+  if (!first) {
     try {
-      git("diff", "--quiet", `origin/${MAIN}`, "--", ...fichiers);
+      git("diff", "--quiet", `origin/${MAIN}`, "--", ...files);
     } catch {
-      throw new Error(`${fichiers.join(" et ")} diffèrent de origin/${MAIN} : merge d'abord la PR qui les change.`);
+      throw new Error(`${files.join(" and ")} differ from origin/${MAIN}: merge the PR that changes them first.`);
     }
   } else {
-    console.log("première installation : protections appliquées depuis cette branche");
+    console.log("first install: protections applied from this branch");
   }
 
-  api([`repos/${REPO}`, "-X", "PATCH"], REGLAGES);
-  console.log("réglages du dépôt : squash uniquement, branches supprimées après merge");
+  api([`repos/${REPO}`, "-X", "PATCH"], SETTINGS);
+  console.log("repository settings: squash only, branches deleted after merge");
   execFileSync("gh", ["api", "-X", "PUT", `repos/${REPO}/immutable-releases`], { stdio: ["ignore", "ignore", "inherit"] });
-  console.log("releases immuables");
-  const trouver = rulesetsGithub();
+  console.log("immutable releases");
+  const find = githubRulesets();
   for (const ruleset of RULESETS) {
-    const id = trouver(ruleset)?.id;
+    const id = find(ruleset)?.id;
     api(id ? [`repos/${REPO}/rulesets/${id}`, "-X", "PUT"] : [`repos/${REPO}/rulesets`, "-X", "POST"], ruleset);
-    console.log(`ruleset « ${ruleset.name} » ${id ? "mis à jour" : "créé"}`);
+    console.log(`ruleset "${ruleset.name}" ${id ? "updated" : "created"}`);
   }
-  const ecarts = verifier();
-  if (ecarts.length) throw new Error(`appliqué, mais GitHub diffère encore :\n- ${ecarts.join("\n- ")}`);
-  console.log("protections en place");
+  const gaps = verify();
+  if (gaps.length) throw new Error(`applied, but GitHub still differs:\n- ${gaps.join("\n- ")}`);
+  console.log("protections in place");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const commande = process.argv[2];
+  const command = process.argv[2];
   try {
-    if (commande === "appliquer") appliquer();
-    else if (commande === "verifier") {
-      const ecarts = verifier();
-      if (ecarts.length) throw new Error(`les protections GitHub ne correspondent pas à scripts/protections.mjs :\n- ${ecarts.join("\n- ")}`);
-      console.log("protections en place");
-    } else throw new Error("usage : node scripts/protections.mjs appliquer|verifier");
+    if (command === "apply") apply();
+    else if (command === "verify") {
+      const gaps = verify();
+      if (gaps.length) throw new Error(`the GitHub protections do not match scripts/protections.mjs:\n- ${gaps.join("\n- ")}`);
+      console.log("protections in place");
+    } else throw new Error("usage: node scripts/protections.mjs apply|verify");
   } catch (e) {
-    console.error(`protections : ${e.stderr?.toString().trim() || e.message}`);
+    console.error(`protections: ${e.stderr?.toString().trim() || e.message}`);
     process.exit(1);
   }
 }

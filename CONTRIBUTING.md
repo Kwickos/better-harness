@@ -1,64 +1,66 @@
-# Règles du dépôt
+English · [Français](CONTRIBUTING.fr.md)
 
-`main` ne bouge que par une PR mergée en squash. Tout le reste en découle, et rien ne passe à côté : GitHub refuse ce que les hooks laisseraient filer.
+# Repository rules
 
-## Travailler
+`main` only moves through a PR merged with squash. Everything else follows from that, and nothing slips past: GitHub refuses what the hooks would let through.
 
-1. **Une branche par ajout**, nommée `<type>/<sujet>` : `feat/canal-beta`, `fix/scroll-liste`. Le sujet s'écrit en minuscules, chiffres et tirets.
-   - Types : `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
-   - `features/…` est le préfixe des sessions de l'app Claude : il est accepté tel quel.
-   - `release/v…` est réservé à `npm run release`.
-2. **Commits signés `Kwickos <Kwickos@users.noreply.github.com>`**, sans trailer `Co-authored-by`.
-3. **Une PR vers `main`** dont le titre suit `<type>: <description>` (ou `<type>(zone): …`), 72 caractères au maximum, sans point final. Ce titre devient le commit de `main`.
-4. **La CI doit passer** : `regles` (branche, titre, auteurs, version), `web` (`npm run build`) et `rust` (`cargo check`).
-5. **Merge en squash.** La branche est supprimée sur GitHub après le merge.
+## Working
 
-La version ne change jamais dans une PR ordinaire : seul `npm run release` la monte.
+1. **One branch per change**, named `<type>/<subject>`: `feat/beta-channel`, `fix/list-scroll`. The subject is written in lowercase letters, digits and hyphens.
+   - Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
+   - `features/…` is the prefix of Claude app sessions: it is accepted as is.
+   - `release/v…` is reserved for `npm run release`.
+2. **Commits signed `Kwickos <Kwickos@users.noreply.github.com>`**, with no `Co-authored-by` trailer.
+3. **A PR to `main`** whose title follows `<type>: <description>` (or `<type>(scope): …`), 72 characters at most, no trailing period. This title becomes the commit on `main`.
+4. **The CI must pass**: `rules` (branch, title, authors, version), `web` (`npm run build`) and `rust` (`cargo check`).
+5. **Squash merge.** The branch is deleted on GitHub after the merge.
+
+The version never changes in an ordinary PR: only `npm run release` bumps it.
 
 ## Issues
 
-Une issue part d'un des trois modèles : **Bug**, **Enhancement** (nouvelle fonction ou amélioration) ou **Documentation**. Chaque modèle pose son label (`bug`, `enhancement`, `documentation`). Les issues vierges sont désactivées. Une PR qui règle une issue l'indique dans sa description (`Closes #12`).
+An issue starts from one of the three templates: **Bug**, **Enhancement** (new feature or improvement) or **Documentation**. Each template sets its label (`bug`, `enhancement`, `documentation`). Blank issues are turned off. A PR that fixes an issue says so in its description (`Closes #12`).
 
-## Publier
+## Publishing
 
-Depuis `main` à jour, sur ce Mac :
+From an up-to-date `main`, on this Mac:
 
 ```bash
-npm run release -- 0.2.0 "Ce qui change"
+npm run release -- 0.2.0 "What changes"
 ```
 
 ```bash
-npm run release -- 0.3.0-beta.1 "Ce qui change"
+npm run release -- 0.3.0-beta.1 "What changes"
 ```
 
 ```bash
 npm run release -- 0.2.0 --dry-run
 ```
 
-Le script vérifie le compte Kwickos, les hooks et les protections GitHub. Il construit l'app sur une branche `release/v<version>`, puis ouvre la PR `release: v<version>`. Il attend la CI, merge en squash, tague ce commit de `main` et publie la release. Si une étape échoue, la PR est fermée et rien n'est publié. Une fois la PR mergée, relancer la même commande reprend à la publication.
+The script checks the Kwickos account, the hooks and the GitHub protections. It builds the app on a `release/v<version>` branch, then opens the `release: v<version>` PR. It waits for the CI, merges with squash, tags that commit of `main` and publishes the release. If a step fails, the PR is closed and nothing is published. Once the PR is merged, running the same command again resumes at publishing.
 
-- **Stable** `x.y.z` : la release devient « latest », et les apps installées se mettent à jour.
-- **Bêta** `x.y.z-beta.N` : la release est une pré-release, jamais proposée aux apps stables. On l'installe à la main depuis la page des releases. L'app revient ensuite seule sur la stable suivante.
+- **Stable** `x.y.z`: the release becomes "latest", and installed apps update themselves.
+- **Beta** `x.y.z-beta.N`: the release is a pre-release, never offered to stable apps. It is installed by hand from the releases page. The app then returns to the next stable on its own.
 
-Les tags `v…` et les releases publiées ne se modifient ni ne se suppriment. Une erreur se corrige par une nouvelle version.
+`v…` tags and published releases are never changed or deleted. A mistake is fixed with a new version.
 
-## Où c'est appliqué
+## Where it is enforced
 
-| Couche | Ce qu'elle fait | Contournable ? |
+| Layer | What it does | Can it be bypassed? |
 | --- | --- | --- |
-| GitHub (`scripts/protections.mjs`) | `main` : PR obligatoire, squash seul, CI `regles` `web` `rust`, historique linéaire, pas de force-push ni de suppression. Branches : seuls les noms autorisés se créent. Tags : seuls les `v…` se créent, aucun ne bouge ni ne disparaît. Releases immuables. | Non : aucune exception, même pour le propriétaire. |
-| CI (`.github/workflows/`) | Contrôles d'une PR, exigés par GitHub avant le merge. | Non. |
-| Hooks git (`.githooks/`) | Refusent localement : commit sur `main`, mauvaise identité, `Co-authored-by`, push vers `main`, mauvais nom de branche, tag hors release. | Avec `--no-verify`, mais GitHub refuse ensuite. |
-| Sessions Claude (`.claude/settings.json`) | Bloquent `--no-verify`, le débranchement des hooks (y compris via `sh -c`, `xargs`, alias), les push de `main` ou de tags, les merges hors squash, `--admin`, les releases à la main et les écritures de l'API dans les protections. Une PR qui touche aux règles se merge par l'utilisateur sur github.com, jamais par une session. | Non, pour une session Claude. |
+| GitHub (`scripts/protections.mjs`) | `main`: PR required, squash only, CI `rules` `web` `rust`, linear history, no force-push or deletion. Branches: only allowed names can be created. Tags: only `v…` can be created, and none moves or disappears. Immutable releases. | No: no exception, not even for the owner. |
+| CI (`.github/workflows/`) | Checks of a PR, required by GitHub before the merge. | No. |
+| Git hooks (`.githooks/`) | Refuse locally: commit on `main`, wrong identity, `Co-authored-by`, push to `main`, wrong branch name, tag outside a release. | With `--no-verify`, but GitHub refuses afterwards. |
+| Claude sessions (`.claude/settings.json`) | Block `--no-verify`, turning the hooks off (including through `sh -c`, `xargs`, aliases), pushes of `main` or of tags, merges other than squash, `--admin`, hand-made releases and API writes to the protections. A PR that touches the rules is merged by the user on github.com, never by a session. | No, for a Claude session. |
 
-Les hooks s'activent avec `npm install`, et à chaque démarrage d'une session Claude. À la main : `node scripts/regles.mjs installer`.
+The hooks are turned on by `npm install`, and at the start of every Claude session. By hand: `node scripts/rules.mjs install`.
 
-## Changer une règle
+## Changing a rule
 
-Les règles vivent dans `scripts/regles.mjs`, les protections GitHub dans `scripts/protections.mjs`. On les change par une PR, comme le reste. Une fois la PR mergée :
+The rules live in `scripts/rules.mjs`, the GitHub protections in `scripts/protections.mjs`. They change through a PR, like everything else. Once the PR is merged:
 
 ```bash
 npm run protections
 ```
 
-Le script n'applique que la version mergée sur `main`. `npm run protections:verifier` compare GitHub au fichier, et la release refuse de partir s'ils diffèrent.
+The script only applies the version merged on `main`. `npm run protections:verify` compares GitHub with the file, and the release refuses to start if they differ.

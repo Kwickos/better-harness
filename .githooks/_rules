@@ -1,0 +1,14 @@
+# Sourced by the hooks: runs scripts/rules.mjs of the same repository as this hook, with node.
+# Without node the hook refuses: a rule that does not run must not let anything through.
+root=$(cd "$(dirname "$0")/.." && pwd)
+node=$(command -v node || true)
+if [ -z "$node" ]; then
+  for candidate in /opt/homebrew/bin/node /usr/local/bin/node "$HOME"/.nvm/versions/node/*/bin/node "$HOME"/.volta/bin/node; do
+    [ -x "$candidate" ] && node=$candidate
+  done
+fi
+if [ -z "$node" ]; then
+  echo "$(basename "$0"): node not found, cannot check the repository rules." >&2
+  exit 1
+fi
+exec "$node" "$root/scripts/rules.mjs" "$(basename "$0")" "$@"
