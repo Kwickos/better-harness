@@ -14,6 +14,17 @@ import { artifactAction, FILES_TOOL, NEXT_STEP_TOOL, SIM_TOOL, simulatorAction, 
 
 const MAX_ITEMS = 600;
 
+/** File a tool read or wrote (Read, Edit, Write, NotebookEdit…), to open it in the panel. */
+function toolFilePath(tv: ToolView): string | null {
+  try {
+    const input = JSON.parse(tv.input) as { file_path?: unknown; notebook_path?: unknown };
+    const path = input.file_path ?? input.notebook_path;
+    return typeof path === "string" && path ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface ToolView {
   t: "tool";
   id: string;
@@ -574,6 +585,16 @@ export class TranscriptRenderer {
     const diff = toolDiff(tv.name, tv.input);
     // Question or plan: they were read in their card, only the result is still useful here.
     const shown = kindOf(tv.name) === "ask" || kindOf(tv.name) === "plan";
+    const path = toolFilePath(tv);
+    if (path) {
+      const open = el("button", "tool-open");
+      open.type = "button";
+      open.dataset.openFile = path;
+      open.title = t("Open in the panel");
+      open.innerHTML = icon("file", 13);
+      open.append(el("span", undefined, path));
+      body.append(open);
+    }
     if (!shown) body.append(diff ? renderLines(diff.lines) : wrapWithCopy(el("pre", "tool-io", tv.input)));
     // A diff already says it all: the tool output only shows if it failed.
     if (tv.result && (!diff || tv.result.isError)) {

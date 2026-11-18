@@ -319,7 +319,8 @@ export const tauriApi = {
   appReady: () => invoke<void>("app_ready"),
   listCommands: (cwd: string) => invoke<{ name: string; description?: string | null }[]>("list_commands", { cwd }),
   cliModels: (cwd: string) => invoke<ModelInfo[]>("cli_models", { cwd }),
-  mentionFiles: (cwd: string, query: string) => invoke<string[]>("mention_files", { cwd, query }),
+  /** `hidden`: dot files (`.env`) are suggested too. */
+  mentionFiles: (cwd: string, query: string, hidden = false) => invoke<string[]>("mention_files", { cwd, query, hidden }),
   cliDefaults: (cwd: string | null) => invoke<CliDefaults>("cli_defaults", { cwd }),
   gitStatus: (cwd: string) => invoke<GitStatus>("git_status", { cwd }),
   gitDiff: (cwd: string, path: string) => invoke<GitDiff>("git_diff", { cwd, path }),
@@ -377,6 +378,12 @@ export const tauriApi = {
     (await invoke<Attachment[]>("attachments", { cwd, paths })).map((a) => (a.image ? { ...a, url: convertFileSrc(a.path) } : a)),
   /** `false`: the file could run, better to show it in the Finder. */
   openAttachment: (path: string) => invoke<boolean>("open_attachment", { path }),
+  fileOpen: async (cwd: string, path: string) => {
+    const f = await invoke<FileView>("file_open", { cwd, path });
+    return f.text === null && f.kind !== "binary" && f.kind !== "large" ? { ...f, url: convertFileSrc(f.path) } : f;
+  },
+  /** Rejects with "conflict" when the file changed on disk since `expected`; `null` overwrites. */
+  fileSave: (path: string, text: string, expected: number | null) => invoke<number>("file_save", { path, text, expected }),
   updateStatus: () => invoke<UpdateState>("update_status"),
   /** Looks for a newer version and downloads it. */
   updateCheck: () => invoke<UpdateState>("update_check"),
@@ -404,6 +411,20 @@ export interface Attachment {
   width: number | null;
   height: number | null;
   /** Image address for the view, added on the UI side. */
+  url?: string;
+}
+
+/** A file opened in the panel's "File" tab. */
+export interface FileView {
+  path: string;
+  name: string;
+  size: number;
+  kind: "text" | "image" | "pdf" | "video" | "audio" | "binary" | "large";
+  text: string | null;
+  /** Modification time (ms) read at opening: a save checks it hasn't changed. */
+  modified: number;
+  readonly: boolean;
+  /** Address of the file for the view (images, PDFs, media), added on the UI side. */
   url?: string;
 }
 

@@ -166,6 +166,8 @@ interface DiffDeps {
   cwd: () => string;
   guard: <T>(p: Promise<T>) => Promise<T | undefined>;
   reveal: (path: string) => void;
+  /** Opens the file in the panel's "File" tab. */
+  preview: (path: string) => void;
 }
 
 export function initDiffTab(d: DiffDeps) {
@@ -241,7 +243,7 @@ export function initDiffTab(d: DiffDeps) {
       }
     });
 
-    const action = (ic: "folder" | "undo", title: string, run: (b: HTMLElement) => void) => {
+    const action = (ic: "file" | "folder" | "undo", title: string, run: (b: HTMLElement) => void) => {
       const b = el("button", "icon-btn diff-act");
       b.type = "button";
       b.title = title;
@@ -253,6 +255,7 @@ export function initDiffTab(d: DiffDeps) {
       });
       row.append(b);
     };
+    if (f.status !== "D") action("file", t("Open"), () => status && d.preview(`${status.root}/${f.path}`));
     if (f.status !== "D") action("folder", t("Show in Finder"), () => status && d.reveal(`${status.root}/${f.path}`));
     if (f.status !== "U") action("undo", t("Revert"), (b) => confirmDiscard(f, b));
 

@@ -312,6 +312,9 @@ const simDevices: SimDevice[] = [
   { udid: "sim-4", name: "iPhone 17e", state: "Shutdown", runtime: "iOS 18.2" },
 ];
 let simAttached: string | null = null;
+/** Files edited in the "File" tab, kept for the page's lifetime. */
+const mockFiles = new Map<string, string>();
+const mockFileTimes = new Map<string, number>();
 let simDirty = false;
 let simDark = false;
 let simTouches = 0;
@@ -449,7 +452,8 @@ export const mockApi: Api = {
       ["simplify", "Review the changed code for reuse and simplification."],
     ].map(([name, description]) => ({ name, description }));
   },
-  mentionFiles: async (cwd, query) => {
+  mentionFiles: async (cwd, query, hidden) => {
+    if (hidden && ".env".includes(query.toLowerCase())) return [".env", ".env.example"];
     if (query.startsWith("/")) return ["/Users/demo/Documents/", "/Users/demo/My projects/", "/Users/demo/notes.md"].filter((p) => p.toLowerCase().startsWith(query.toLowerCase()));
     if (cwd === SCRATCH) return [];
     return ["src/", "docs/", "README.md", "package.json", "src/main.ts", "src/styles.css", "src/composer.ts", "docs/release notes.md"].filter((p) => p.toLowerCase().includes(query.toLowerCase()));
@@ -647,6 +651,24 @@ export const mockApi: Api = {
     return paths.map((p) => mockAttachment(cwd, p));
   },
   openAttachment: async (path) => !path.endsWith(".command"),
+  fileOpen: async (cwd, path) => {
+    await sleep(30);
+    const full = path.startsWith("/") ? path : `${cwd}/${path}`;
+    const name = full.split("/").pop() ?? full;
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    if (["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext)) return { path: full, name, size: 48_213, kind: "image", text: null, modified: 1, readonly: false, url: mockAttachment(cwd, path).url };
+    if (["pdf", "mp4", "mp3", "woff2"].includes(ext)) return { path: full, name, size: 1_204_331, kind: ext === "woff2" ? "binary" : ext === "pdf" ? "pdf" : ext === "mp4" ? "video" : "audio", text: null, modified: 1, readonly: false };
+    const text = mockFiles.get(full) ?? (name.startsWith(".env") ? "# Local settings\nDATABASE_URL=postgres://localhost:5432/app\nAPI_KEY=change-me\nDEBUG=true\n" : `// ${name}\nexport const answer = 42;\n`);
+    return { path: full, name, size: text.length, kind: "text", text, modified: mockFileTimes.get(full) ?? 1, readonly: false };
+  },
+  fileSave: async (path, text, expected) => {
+    await sleep(40);
+    const now = (mockFileTimes.get(path) ?? 1);
+    if (expected !== null && expected !== now) throw "conflict";
+    mockFiles.set(path, text);
+    mockFileTimes.set(path, now + 1);
+    return now + 1;
+  },
   updateStatus: async () => mockUpdate,
   updateCheck: async () => {
     setMockUpdate({ state: "checking" });

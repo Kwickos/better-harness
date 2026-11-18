@@ -72,7 +72,7 @@ const renderer = new TranscriptRenderer(
   },
   (tv, settled) => attachmentsUi.render(tv, currentCwd(), settled),
 );
-const attachmentsUi = initAttachments({ api, guard, reveal, overlayChanged: () => panel.syncBrowser() });
+const attachmentsUi = initAttachments({ api, guard, reveal, preview: (path) => panel.openFile(path), overlayChanged: () => panel.syncBrowser() });
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const home = (p: string) => (appHome && p.startsWith(appHome) ? `~${p.slice(appHome.length)}` : p);
@@ -129,6 +129,12 @@ const activeView = () => (active ? views.get(active) : undefined);
 const currentCwd = () => activeView()?.info.cwd ?? (draft.cwd || scratchDir);
 const activityOf = (v: SessionView) => (v.perms.size || v.info.pendingPermissions ? "wait" : v.info.state === "busy" ? "busy" : "");
 
+/** Opens a file in its macOS app; one that could run is shown in the Finder instead. */
+async function openInApp(path: string) {
+  const opened = await guard(api.openAttachment(path));
+  if (opened === false) reveal(path);
+}
+
 function reveal(path: string) {
   if (inTauri) void import("@tauri-apps/plugin-opener").then((m) => m.revealItemInDir(path));
 }
@@ -147,7 +153,7 @@ function removeArtifact(url: string) {
   for (const v of views.values()) v.artifacts = v.artifacts.filter((a) => a.url !== url);
 }
 
-const panel = initPanel({ api, inTauri, cwd: currentCwd, sid: () => active, guard, openExternal, reveal, attach: (path) => composer.attach(path), artifacts: () => activeView()?.artifacts ?? [], removeArtifact });
+const panel = initPanel({ api, inTauri, cwd: currentCwd, sid: () => active, guard, openExternal, reveal, openFile: openInApp, attach: (path) => composer.attach(path), artifacts: () => activeView()?.artifacts ?? [], removeArtifact });
 // Pixel art world: one creature per Claude in the conversation (Pixel art mode only).
 const world = initWorld({
   active: () => active,
@@ -1658,6 +1664,9 @@ document.addEventListener("keydown", (e) => {
   } else if (e.shiftKey && k === "a") {
     e.preventDefault();
     panel.toggle("artifacts");
+  } else if (!e.shiftKey && k === "p") {
+    e.preventDefault();
+    panel.findFile();
   } else if (k === "n") {
     e.preventDefault();
     newConversation();
@@ -1672,6 +1681,13 @@ document.addEventListener("keydown", (e) => {
 
 // Links in messages: a local link opens in the built-in browser, others open outside.
 $("transcript").addEventListener("click", (e) => {
+  // A file read or written by a tool opens in the panel.
+  const fileBtn = (e.target as HTMLElement).closest<HTMLElement>("[data-open-file]");
+  if (fileBtn) {
+    e.preventDefault();
+    panel.openFile(fileBtn.dataset.openFile!);
+    return;
+  }
   const a = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
   if (!a) return;
   e.preventDefault();

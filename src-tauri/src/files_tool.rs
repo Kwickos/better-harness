@@ -22,7 +22,7 @@ inline as previews the user can open full size; other files appear as cards that
 whenever the user would want to see a file you made or found: a generated image, a screenshot, a chart, a PDF, an export. \
 The files must already exist; paths are absolute or relative to the working directory. Nothing of the files comes back to you.";
 
-const IMAGE_EXT: [&str; 14] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff", "heic", "heif", "avif", "apng"];
+pub const IMAGE_EXT: [&str; 14] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff", "heic", "heif", "avif", "apng"];
 
 /// Files "Open" must not launch: a script or a shortcut would run instead of showing.
 const RUNNABLE_EXT: [&str; 20] = [
