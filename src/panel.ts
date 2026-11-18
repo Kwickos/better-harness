@@ -4,6 +4,7 @@ import type { Api, Artifact, McpServerStatus, Rect, ServerInfo, UiEvent } from "
 import { initArtifactTab } from "./artifacts";
 import { copyButton } from "./copy";
 import { initDiffTab } from "./diff";
+import { initFileTab } from "./fileview";
 import { t, tp } from "./i18n";
 import { icon } from "./icons";
 import { menuElement, onMenuChange } from "./menu";
@@ -11,7 +12,8 @@ import { DIST, DUR, enter, iconIn, leave, staggerIn } from "./motion";
 import { initSimulatorTab } from "./simulator";
 import { el } from "./transcript";
 
-type Tab = "browser" | "servers" | "diff" | "simulator" | "artifacts";
+type Tab = "browser" | "servers" | "diff" | "simulator" | "artifacts" | "file";
+const TABS: Tab[] = ["browser", "servers", "diff", "simulator", "artifacts", "file"];
 
 /** State shown next to an MCP server (translated when shown): nothing while all is well. */
 const MCP_STATES: Record<string, string> = { connected: "", disabled: "", failed: "failed", pending: "connecting…", "needs-auth": "needs auth" };
@@ -24,6 +26,7 @@ interface Deps {
   guard: <T>(p: Promise<T>) => Promise<T | undefined>;
   openExternal: (url: string) => void;
   reveal: (path: string) => void;
+  openFile: (path: string) => void;
   attach: (path: string) => void;
   artifacts: () => Artifact[];
   removeArtifact: (url: string) => void;
@@ -54,13 +57,30 @@ export function initPanel(d: Deps) {
   const urlIn = $("b-url") as HTMLInputElement;
   let open = store.get("panel.open") === "1";
   const savedTab = store.get("panel.tab");
-  let tab: Tab = savedTab === "servers" || savedTab === "diff" || savedTab === "simulator" || savedTab === "artifacts" ? savedTab : "browser";
+  // The "File" tab starts empty: no reason to reopen on it.
+  let tab: Tab = TABS.includes(savedTab as Tab) && savedTab !== "file" ? (savedTab as Tab) : "browser";
   let wasOpen = open;
   let shownTab = tab;
   let shownCwd = d.cwd();
   let opening = false;
-  const diffTab = initDiffTab({ api: d.api, cwd: d.cwd, guard: d.guard, reveal: d.reveal });
+  const diffTab = initDiffTab({ api: d.api, cwd: d.cwd, guard: d.guard, reveal: d.reveal, preview: (path) => void fileTab.open(path) });
   const simTab = initSimulatorTab({ api: d.api, guard: d.guard, attach: d.attach });
+  const fileTab = initFileTab({
+    api: d.api,
+    cwd: d.cwd,
+    guard: d.guard,
+    reveal: d.reveal,
+    openExternal: d.openFile,
+    show: () => {
+      if (open && tab === "file") return;
+      open = true;
+      tab = "file";
+      store.set("panel.open", "1");
+      store.set("panel.tab", tab);
+      render();
+    },
+    changed: () => renderFileToggle(),
+  });
   const artifactView = $("art-view");
   const artifactTab = initArtifactTab({
     api: d.api,
@@ -117,7 +137,7 @@ export function initPanel(d: Deps) {
     }
     wasOpen = open;
     shownTab = tab;
-    for (const id of ["browser", "servers", "diff", "simulator", "artifacts"] as const) {
+    for (const id of TABS) {
       $(`toggle-${id}`).setAttribute("aria-pressed", String(open && tab === id));
       $(`tab-${id}`).hidden = tab !== id;
     }
@@ -126,8 +146,21 @@ export function initPanel(d: Deps) {
     simTab.setVisible(open && tab === "simulator");
     artifactTab.setVisible(open && tab === "artifacts");
     renderArtifactToggle();
+    renderFileToggle();
     renderEmpty();
     syncBrowser();
+  }
+
+  /** The button only exists while a file is open, or while the tab is shown. */
+  function renderFileToggle() {
+    const button = $("toggle-file");
+    const wanted = fileTab.hasFile() || (open && tab === "file");
+    if (wanted && button.hidden) {
+      button.hidden = false;
+      iconIn(button.firstElementChild as HTMLElement);
+    } else if (!wanted) {
+      button.hidden = true;
+    }
   }
 
   /** The button only exists for a conversation that has artifacts, or while the tab is open. */
@@ -425,6 +458,7 @@ export function initPanel(d: Deps) {
   $("toggle-diff").addEventListener("click", () => toggle("diff"));
   $("toggle-simulator").addEventListener("click", () => toggle("simulator"));
   $("toggle-artifacts").addEventListener("click", () => toggle("artifacts"));
+  $("toggle-file").addEventListener("click", () => toggle("file"));
 
   function openUrl(url: string) {
     open = true;
@@ -474,6 +508,19 @@ export function initPanel(d: Deps) {
     },
     toggle,
     onEvent,
+    /** Previews or edits a file in the panel. */
+    openFile: (path: string) => void fileTab.open(path),
+    /** ⌘P: the "File" tab, caret in its search field. */
+    findFile() {
+      if (!open || tab !== "file") {
+        open = true;
+        tab = "file";
+        store.set("panel.open", "1");
+        store.set("panel.tab", tab);
+        render();
+      }
+      fileTab.focusSearch();
+    },
     openUrl,
     syncBrowser,
     /** A page was just published: show it, without leaving another open tab unless explicitly asked. */
@@ -508,6 +555,7 @@ export function initPanel(d: Deps) {
     },
     /** A tool just ran, or the window came back to the front: files may have changed. */
     filesChanged() {
+      fileTab.refresh();
       if (!open || tab !== "diff") return;
       window.clearTimeout(filesTimer);
       filesTimer = window.setTimeout(() => void diffTab.refresh(), 500);

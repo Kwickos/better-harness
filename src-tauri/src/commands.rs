@@ -318,8 +318,8 @@ pub async fn cli_models(hub: H<'_>, cwd: String) -> Result<serde_json::Value, St
 
 /// Files and folders suggested after "@".
 #[tauri::command]
-pub async fn mention_files(cwd: String, query: String) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || crate::mentions::search(&cwd, &query)).await.map_err(|e| e.to_string())
+pub async fn mention_files(cwd: String, query: String, hidden: Option<bool>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::mentions::search(&cwd, &query, hidden.unwrap_or(false))).await.map_err(|e| e.to_string())
 }
 
 /// Clipboard through the system: depends neither on the web view's context nor on its permissions.
@@ -466,6 +466,26 @@ pub fn open_attachment(path: String) -> Result<bool, String> {
     }
     tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+// ---------------------------------------------------------------- "File" tab
+
+/// A file to preview or edit. Images, PDFs and media become readable through the `asset`
+/// protocol, that file only.
+#[tauri::command]
+pub async fn file_open(app: tauri::AppHandle, cwd: String, path: String) -> Result<crate::file_view::FileView, String> {
+    use tauri::Manager;
+    let view = tauri::async_runtime::spawn_blocking(move || crate::file_view::open(&cwd, &path)).await.map_err(|e| e.to_string())??;
+    if view.text.is_none() && matches!(view.kind, "image" | "pdf" | "video" | "audio") {
+        let _ = app.asset_protocol_scope().allow_file(&view.path);
+    }
+    Ok(view)
+}
+
+/// `"conflict"` as the error: the file changed on disk since `expected`.
+#[tauri::command]
+pub fn file_save(path: String, text: String, expected: Option<u64>) -> Result<u64, String> {
+    crate::file_view::save(&path, &text, expected)
 }
 
 // ---------------------------------------------------------------- updates

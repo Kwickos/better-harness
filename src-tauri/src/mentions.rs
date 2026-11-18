@@ -31,7 +31,8 @@ fn is_dir(entry: &std::fs::DirEntry) -> bool {
 }
 
 /// Paths relative to `root` that contain `query`, shortest first. A folder ends with `/`.
-fn search_project(root: &Path, query: &str) -> Vec<String> {
+/// `hidden`: dot files count too (`.env`), the noisy folders stay out.
+fn search_project(root: &Path, query: &str, hidden: bool) -> Vec<String> {
     let needle = query.to_lowercase();
     let mut results = Vec::new();
     let mut queue = VecDeque::from([(root.to_path_buf(), 0usize)]);
@@ -44,7 +45,7 @@ fn search_project(root: &Path, query: &str) -> Vec<String> {
                 break 'walk;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') || SKIP.contains(&name.as_str()) {
+            if (name.starts_with('.') && !hidden) || SKIP.contains(&name.as_str()) {
                 continue;
             }
             let path = entry.path();
@@ -96,13 +97,13 @@ fn browse(typed: &str, home: &Path) -> Vec<String> {
     found.into_iter().map(|(_, p)| p).collect()
 }
 
-pub fn search(cwd: &str, query: &str) -> Vec<String> {
+pub fn search(cwd: &str, query: &str, hidden: bool) -> Vec<String> {
     if query.starts_with('/') || query.starts_with("~/") || query == "~" {
         return browse(query, &dirs::home_dir().unwrap_or_default());
     }
     let root = Path::new(cwd);
     if root.is_dir() {
-        search_project(root, query)
+        search_project(root, query, hidden)
     } else {
         vec![]
     }
@@ -126,7 +127,7 @@ mod tests {
     #[test]
     fn searches_the_project() {
         let root = tree();
-        let all = search_project(&root, "");
+        let all = search_project(&root, "", false);
         assert!(all.contains(&"src/".to_string()), "{all:?}");
         assert!(all.contains(&"src/ui/menu.ts".to_string()), "{all:?}");
         assert!(all.contains(&"folder with space/note.md".to_string()), "{all:?}");
@@ -135,9 +136,12 @@ mod tests {
         // Shortest first.
         assert!(all.windows(2).all(|w| w[0].chars().count() <= w[1].chars().count()), "{all:?}");
 
-        assert_eq!(search_project(&root, "MENU"), ["src/ui/menu.ts"]);
-        assert_eq!(search_project(&root, "src/ui/"), ["src/ui/", "src/ui/menu.ts"]);
-        assert!(search_project(&root, "missing").is_empty());
+        assert_eq!(search_project(&root, "MENU", false), ["src/ui/menu.ts"]);
+        assert_eq!(search_project(&root, "src/ui/", false), ["src/ui/", "src/ui/menu.ts"]);
+        assert!(search_project(&root, "missing", false).is_empty());
+        // Opening a file: dot files are found, `.git` still isn't.
+        assert_eq!(search_project(&root, "env", true), [".env"]);
+        assert!(!search_project(&root, "", true).iter().any(|p| p.contains(".git")));
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -148,7 +152,7 @@ mod tests {
         for i in 0..120 {
             std::fs::write(root.join(format!("f{i}.txt")), "").unwrap();
         }
-        assert_eq!(search_project(&root, "").len(), MAX_RESULTS);
+        assert_eq!(search_project(&root, "", false).len(), MAX_RESULTS);
         let _ = std::fs::remove_dir_all(root);
     }
 

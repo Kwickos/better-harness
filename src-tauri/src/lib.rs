@@ -3,6 +3,7 @@ mod browser;
 mod cli_updates;
 mod commands;
 mod events;
+mod file_view;
 mod files_tool;
 mod git;
 mod history;
@@ -122,6 +123,8 @@ pub fn run() {
             commands::artifact_delete,
             commands::attachments,
             commands::open_attachment,
+            commands::file_open,
+            commands::file_save,
             commands::sim_devices,
             commands::sim_boot,
             commands::sim_shutdown,

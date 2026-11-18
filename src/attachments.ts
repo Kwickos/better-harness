@@ -14,6 +14,8 @@ interface Deps {
   api: Api;
   guard: <T>(p: Promise<T>) => Promise<T | undefined>;
   reveal: (path: string) => void;
+  /** Opens the file in the panel's "File" tab. */
+  preview: (path: string) => void;
   /** The viewer opens or closes: the panel's native views must step aside or come back. */
   overlayChanged: () => void;
 }
@@ -107,9 +109,9 @@ export function initAttachments(d: Deps) {
     open.innerHTML = icon("file", 16);
     open.append(el("span", "att-name", a.name));
     if (!a.exists) open.append(el("span", "att-note", t("not found")));
-    open.addEventListener("click", () => void openFile(a.path));
+    open.addEventListener("click", () => d.preview(a.path));
     row.append(open);
-    if (a.exists) row.append(iconButton("folder", "Show in Finder", "att-reveal", () => d.reveal(a.path)));
+    if (a.exists) row.append(iconButton("external", "Open in its app", "att-reveal", () => void openFile(a.path)), iconButton("folder", "Show in Finder", "att-reveal", () => d.reveal(a.path)));
     return row;
   }
 

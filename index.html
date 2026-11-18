@@ -31,6 +31,7 @@
               <div id="crumb" data-tauri-drag-region></div>
               <div class="bar-actions">
                 <button id="more" class="icon-btn" type="button" title="Actions" aria-label="Conversation actions" data-i18n-attr="title,aria-label" hidden><span data-icon="more"></span></button>
+                <button id="toggle-file" class="icon-btn" type="button" title="File  ⌘P" aria-label="File" data-i18n-attr="title,aria-label" hidden><span data-icon="file"></span></button>
                 <button id="toggle-diff" class="icon-btn" type="button" title="Changes  ⌘⇧D" aria-label="Changes" data-i18n-attr="title,aria-label"><span data-icon="gitDiff"></span></button>
                 <button id="toggle-servers" class="icon-btn" type="button" title="Servers  ⌘⇧S" aria-label="Servers" data-i18n-attr="title,aria-label"><span data-icon="server"></span></button>
                 <button id="toggle-artifacts" class="icon-btn" type="button" title="Artifacts  ⌘⇧A" aria-label="Artifacts" data-i18n-attr="title,aria-label" hidden><span data-icon="artifact"></span></button>
@@ -92,6 +93,27 @@
                   <div id="b-suggest" class="chips"></div>
                 </div>
                 <iframe id="b-frame" title="Preview" data-i18n-attr="title" hidden></iframe>
+              </div>
+            </div>
+
+            <div id="tab-file" class="tab-body">
+              <div class="panel-head url-bar" data-tauri-drag-region>
+                <div class="url-field file-field">
+                  <input id="file-q" placeholder="Find a file in the project" data-i18n-attr="placeholder" spellcheck="false" autocomplete="off" />
+                  <div id="file-results" class="menu file-results" hidden></div>
+                </div>
+                <div id="file-actions" class="sim-actions" hidden>
+                  <button id="file-save" class="btn btn-primary file-save" type="button" title="Save  ⌘S" data-i18n-attr="title" hidden><span data-i18n>Save</span></button>
+                  <button id="file-external" class="icon-btn" type="button" title="Open in its app" aria-label="Open in its app" data-i18n-attr="title,aria-label"><span data-icon="external"></span></button>
+                  <button id="file-reveal" class="icon-btn" type="button" title="Show in Finder" aria-label="Show in Finder" data-i18n-attr="title,aria-label"><span data-icon="folder"></span></button>
+                  <button id="file-close" class="icon-btn" type="button" title="Close" aria-label="Close the file" data-i18n-attr="title,aria-label"><span data-icon="close"></span></button>
+                </div>
+              </div>
+              <div id="file-view">
+                <div id="file-empty" class="panel-empty">
+                  <p class="panel-title" data-i18n>No file open</p>
+                  <p class="panel-sub" data-i18n>Find a file above, or open one from the conversation or the changes.</p>
+                </div>
               </div>
             </div>
 

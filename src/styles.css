@@ -527,6 +527,23 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--fill); font-size: 12.5px; color: var(--ink); }
 .chip:hover { background: var(--fill-2); }
 
+/* "File" tab: the search field doubles as the open file's path. */
+.file-field { position: relative; }
+.menu.file-results { position: absolute; top: 32px; right: 0; left: 0; max-width: none; }
+.menu.file-results .menu-item.is-active { background: var(--fill); }
+.file-save { height: 24px; margin-right: 4px; padding: 0 9px; font-size: 12px; }
+#file-view { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; margin: 0 8px 8px; overflow: hidden; border-radius: 10px; background: var(--bg); }
+#file-empty { flex: 1; }
+.file-text { flex: 1; width: 100%; min-height: 0; padding: 12px 14px; border: 0; resize: none; background: transparent; color: var(--ink); font: 12.5px/1.6 var(--mono); tab-size: 4; white-space: pre; overflow: auto; }
+.file-text:focus { outline: 0; }
+.file-media { display: grid; flex: 1; place-items: center; min-height: 0; padding: 16px; overflow: auto; }
+.file-media img, .file-media video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.file-media audio { width: min(100%, 420px); }
+.file-pdf { flex: 1; width: 100%; border: 0; background: #fff; }
+.tool-open { display: inline-flex; align-items: center; gap: 6px; justify-self: start; max-width: 100%; height: 22px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: 12px var(--mono); }
+.tool-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-open:hover { background: var(--fill); color: var(--ink); }
+
 .sim-head { gap: 2px; }
 .sim-head .menu-btn { max-width: 190px; }
 .sim-actions { display: flex; flex: none; gap: 2px; }
