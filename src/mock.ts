@@ -381,6 +381,7 @@ export const mockApi: Api = {
     if (cwd === SCRATCH) return [];
     return ["src/", "docs/", "README.md", "package.json", "src/main.ts", "src/styles.css", "src/composer.ts", "docs/release notes.md"].filter((p) => p.toLowerCase().includes(query.toLowerCase()));
   },
+  cliModels: async () => MODELS,
   cliDefaults: async () => ({ model: null, effort: "xhigh" }),
   gitStatus: async (cwd) =>
     cwd === SCRATCH || cwd.includes("scripts")

@@ -100,6 +100,7 @@ pub fn run() {
             commands::copy_text,
             commands::cli_defaults,
             commands::list_commands,
+            commands::cli_models,
             commands::mention_files,
             commands::git_status,
             commands::git_diff,

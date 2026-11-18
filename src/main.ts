@@ -2,7 +2,7 @@ import { fmtMb, fmtNumber, lang, onLangChange, setLang, t, tp, translateDom } fr
 import "./errors";
 import { tauriApi, type UpdateState, type UsageWindows, type Api, type ContextUsage, type HistoryEntry, type PermissionEv, type ProcStat, type SessionInfo, type Settings, type UiEvent } from "./api";
 import { icon, type IconName } from "./icons";
-import { deleteNote, effectiveEffort, effortLabel, effortLevels, hasModels, isCurrentModel, modes, modeOf, modelChoices, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
+import { deleteNote, effectiveEffort, effortLabel, effortLevels, isCurrentModel, modes, modeOf, modelChoices, modelsCli, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
 import { closeMenu, confirmMenu, menuElement, menuItem, onMenuChange, segmented, showMenu, type MenuEntry } from "./menu";
 import { animateOut, DUR, enter, flipY, goLive, heightIn, heightOut, iconIn, leave, motionLive, swapText, textIn } from "./motion";
 import { initComposer } from "./composer";
@@ -134,7 +134,9 @@ const settingsUi = initSettings({
   home,
   onHistoryChanged: () => void refreshHistory(),
   onSaved: (s) => {
+    const otherCli = s.claudePath !== settings.claudePath;
     settings = s;
+    if (otherCli) void api.appInfo().then((i) => refreshModels(i.claudeVersion), () => undefined);
     if (!active) {
       draft.model = s.defaultModel;
       draft.effort = s.defaultEffort;
@@ -884,6 +886,19 @@ async function refreshCliDefaults() {
   }
 }
 
+/**
+ * The picker offers the models of the CLI installed now. Sessions send them when they start;
+ * after a `claude update` (another version than the one of the cached list), they are asked at
+ * once, so the list of the previous version isn't shown until then.
+ */
+async function refreshModels(version: string | null) {
+  if (!version || version === modelsCli()) return;
+  const list = await api.cliModels(currentCwd()).catch(() => null);
+  if (!list?.length) return;
+  rememberModels(list, version);
+  renderComposer();
+}
+
 // A choice in the composer only applies to this conversation: defaults are set in Settings.
 function pick(kind: "model" | "mode" | "effort" | "advisor", value: string | null) {
   const v = activeView();
@@ -1500,15 +1515,13 @@ async function boot() {
     sidebarKey = "";
     renderSidebar();
     renderMain();
+    void refreshModels(i.claudeVersion);
   }, () => undefined);
   draft.model = settings.defaultModel;
   draft.mode = settings.defaultPermissionMode;
   draft.effort = settings.defaultEffort;
   const lastDir = settings.recentDirs[0] ?? "";
   draft.cwd = lastDir === scratchDir ? "" : lastDir;
-  // No model list from the CLI yet (first launch): ask it in the background, without a message to the model.
-  const probeDir = draft.cwd || scratchDir;
-  if (!hasModels() && probeDir) void api.listCommands(probeDir).catch(() => undefined);
   for (const info of await api.listSessions()) view(info);
   const first = [...views.values()].sort((a, b) => b.info.lastActiveMs - a.info.lastActiveMs)[0];
   if (first) await activate(first.info.sid);
