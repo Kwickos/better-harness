@@ -214,6 +214,8 @@ export interface Settings {
   mcpSelected: string[];
   partialMessages: boolean;
   allTools: boolean;
+  /** A turn that leaves a decision ends with a box: recap, question, buttons (`next_step` tool). */
+  nextStep: boolean;
   recentDirs: string[];
   /** "en" (default), "fr" or "system" (src/i18n.ts). */
   language: string;

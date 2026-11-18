@@ -5,6 +5,7 @@
 // shown and the window visible.
 import type { Block, UiEvent } from "./api";
 import { t, tp } from "./i18n";
+import { NEXT_STEP_TOOL } from "./labels";
 import nightUrl from "./assets/world-night.png";
 import dayUrl from "./assets/world-day.png";
 import foxSheetUrl from "./assets/critters/fox.png";
@@ -410,7 +411,7 @@ export function initWorld(d: Deps) {
             go(main(ev.sid), "gate", t("Sending help: {mission}", { mission }));
           }
         }
-        const work = ev.parent ? tools : tools.filter((b) => !isAgent(b));
+        const work = (ev.parent ? tools : tools.filter((b) => !isAgent(b))).filter((b) => b.name !== NEXT_STEP_TOOL);
         const c = ev.parent ? s.critters.get(ev.parent) : main(ev.sid);
         if (!c || c.reporting) return;
         if (work.length) {

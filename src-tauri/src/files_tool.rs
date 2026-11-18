@@ -1,7 +1,8 @@
 //! The MCP tool that lets Claude attach files to the conversation: images show as previews,
 //! other files as cards that open in their app. Served like `simulator_tool` ("sdk" server on
 //! the stream-json channel), with no extra process. The tool returns nothing of the content to
-//! the model: it shows a file to the user, hence its approval without a prompt.
+//! the model: it shows a file to the user, hence its approval without a prompt. The same server
+//! serves `next_step` (src-tauri/src/next_step.rs).
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -45,8 +46,8 @@ fn tool() -> Value {
     })
 }
 
-/// Answers a JSON-RPC message from the CLI.
-pub fn handle(cwd: &str, message: &Value) -> Value {
+/// Answers a JSON-RPC message from the CLI. `next_step`: the next-step box is on in the settings.
+pub fn handle(cwd: &str, message: &Value, next_step: bool) -> Value {
     let id = message["id"].clone();
     let result = match message["method"].as_str() {
         Some("initialize") => json!({
@@ -54,8 +55,14 @@ pub fn handle(cwd: &str, message: &Value) -> Value {
             "capabilities": { "tools": {} },
             "serverInfo": { "name": SERVER, "version": env!("CARGO_PKG_VERSION") }
         }),
-        Some("tools/list") => json!({ "tools": [tool()] }),
-        Some("tools/call") => match run(cwd, &message["params"]["arguments"]) {
+        Some("tools/list") => {
+            let mut tools = vec![tool()];
+            if next_step {
+                tools.push(crate::next_step::tool());
+            }
+            json!({ "tools": tools })
+        }
+        Some("tools/call") => match call(cwd, &message["params"]) {
             Ok(text) => json!({ "content": [{ "type": "text", "text": text }] }),
             Err(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": true }),
         },
@@ -65,6 +72,14 @@ pub fn handle(cwd: &str, message: &Value) -> Value {
         _ => return json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Method not found" } }),
     };
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
+}
+
+fn call(cwd: &str, params: &Value) -> Result<String, String> {
+    let args = &params["arguments"];
+    match params["name"].as_str() {
+        Some(crate::next_step::NAME) => crate::next_step::run(args),
+        _ => run(cwd, args),
+    }
 }
 
 /// The requested paths: a list, or a single path passed as a string.
@@ -172,6 +187,14 @@ mod tests {
     }
 
     #[test]
+    fn next_step_listed_only_when_on() {
+        let list = |on: bool| handle("/", &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }), on)["result"]["tools"].as_array().unwrap().len();
+        assert_eq!((list(true), list(false)), (2, 1));
+        let box_call = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": "next_step", "arguments": {} } });
+        assert_eq!(handle("/", &box_call, true)["result"]["isError"], true);
+    }
+
+    #[test]
     fn requested_files() {
         assert_eq!(requested(&json!({ "files": ["a.png", " ", "b.pdf"] })), vec!["a.png", "b.pdf"]);
         assert_eq!(requested(&json!({ "files": "a.png" })), vec!["a.png"]);
@@ -188,7 +211,7 @@ mod tests {
         std::fs::write(dir.join("a.png"), &png).unwrap();
         let cwd = dir.to_str().unwrap();
 
-        let call = |args: Value| handle(cwd, &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "arguments": args } }));
+        let call = |args: Value| handle(cwd, &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "send_files", "arguments": args } }), true);
         let ok = call(json!({ "files": ["a.png", "absent.pdf"] }));
         assert_eq!(ok["result"]["isError"], Value::Null);
         assert_eq!(ok["result"]["content"][0]["text"], "Shown to the user: a.png. Not found, not shown: absent.pdf.");

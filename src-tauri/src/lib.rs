@@ -11,6 +11,7 @@ mod i18n;
 mod mcp;
 mod mentions;
 mod metrics;
+mod next_step;
 mod protocol;
 mod servers;
 mod settings;

@@ -13,7 +13,7 @@ const EDIT_INPUT_MAX: usize = 32_000;
 
 /// Diff, question, plan or attached files: the UI reads these inputs, they must stay complete JSON.
 pub fn tool_input_max(tool: &str) -> usize {
-    if matches!(tool, "Edit" | "MultiEdit" | "Write" | "NotebookEdit" | "AskUserQuestion" | "ExitPlanMode" | crate::files_tool::TOOL) {
+    if matches!(tool, "Edit" | "MultiEdit" | "Write" | "NotebookEdit" | "AskUserQuestion" | "ExitPlanMode" | crate::files_tool::TOOL | crate::next_step::TOOL) {
         EDIT_INPUT_MAX
     } else {
         TOOL_INPUT_MAX

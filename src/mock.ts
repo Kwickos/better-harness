@@ -85,6 +85,7 @@ let settings: Settings = {
   partialMessages: true,
   allTools: false,
   cliAutoUpdate: true,
+  nextStep: true,
   recentDirs: ["/Users/demo/Code/better-harness", "/Users/demo/Code/billing-api", "/Users/demo/Code/studio-site", "/Users/demo/Code/ws", "/Users/demo/Archive/ws", "/Users/demo/Code/internal-tools", "/Users/demo/Code/marketing-site"],
   updateChannel: "stable",
   // Settings live in memory here: keep the language across reloads, like the real app does.
@@ -252,6 +253,19 @@ async function runTurn(sid: string, prompt: string) {
   });
   const mid2 = `m${Date.now()}`;
   const final = ok ? REPLY_2 : "Understood, I won't run the build.";
+  // Like the model: the next-step box comes right before the closing message.
+  if (settings.nextStep && ok) {
+    const step = {
+      recap: "The composer now groups the text, the model and the mode, and the send button is disabled when the field is empty. The build passes; nothing is committed yet.",
+      ask: "Commit these changes?",
+      buttons: [
+        { label: "Commit", message: "Commit the composer changes on this branch with a feat: message, then open a PR to main." },
+        { label: "Test first", message: "Before committing, open the app, check the disabled send button and the queued-message hint, and send me a screenshot." },
+      ],
+    };
+    emit({ kind: "assistant", sid, id: `${mid2}-step`, parent: null, blocks: [{ t: "tool", id: `ns-${mid2}`, name: "mcp__harness__next_step", summary: "", input: JSON.stringify(step, null, 2) }] });
+    emit({ kind: "toolResult", sid, toolUseId: `ns-${mid2}`, parent: null, isError: false, text: "Shown to the user.", truncated: false });
+  }
   await stream(sid, final);
   emit({ kind: "assistant", sid, id: mid2, parent: null, blocks: [{ t: "text", text: final }] });
   emit({ kind: "status", sid, status: null });

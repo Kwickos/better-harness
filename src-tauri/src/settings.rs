@@ -30,6 +30,8 @@ pub struct Settings {
     pub partial_messages: bool,
     /// Keep the heavy, rarely used tools (`HEAVY_TOOLS`), removed by default.
     pub all_tools: bool,
+    /// A turn that leaves the user a decision ends with a box: recap, question, buttons (`next_step` tool).
+    pub next_step: bool,
     pub recent_dirs: Vec<String>,
     /// Interface language: "en" (default), "fr", or "system" (macOS preferred languages).
     pub language: String,
@@ -57,6 +59,7 @@ impl Default for Settings {
             mcp_selected: vec![],
             partial_messages: true,
             all_tools: false,
+            next_step: true,
             recent_dirs: vec![],
             language: "en".into(),
             update_channel: "stable".into(),

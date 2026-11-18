@@ -422,9 +422,9 @@ impl Hub {
         }
 
         // Live process limit: suspend the oldest idle session.
-        let (max_live, partial, claude_path, all_tools) = {
+        let (max_live, partial, claude_path, all_tools, next_step) = {
             let s = self.settings.lock().unwrap();
-            (s.max_live.max(1), s.partial_messages, s.claude_path.clone(), s.all_tools)
+            (s.max_live.max(1), s.partial_messages, s.claude_path.clone(), s.all_tools, s.next_step)
         };
         let victim = {
             let map = self.sessions.lock().unwrap();
@@ -488,7 +488,12 @@ impl Hub {
             cmd.arg("--mcp-config").arg(crate::simulator_tool::CONFIG);
         }
         cmd.arg("--mcp-config").arg(crate::files_tool::CONFIG);
-        cmd.arg("--append-system-prompt").arg(crate::files_tool::PROMPT);
+        let prompt = if next_step {
+            format!("{} {}", crate::files_tool::PROMPT, crate::next_step::PROMPT)
+        } else {
+            crate::files_tool::PROMPT.to_string()
+        };
+        cmd.arg("--append-system-prompt").arg(prompt);
         cmd.current_dir(&p.cwd)
             .env("PATH", path_env)
             // In SDK mode, the CLI offers the `Artifact` tool only if the host asks for it.
@@ -1177,8 +1182,8 @@ impl Hub {
                 if req["subtype"] == "can_use_tool" {
                     let tool_name = req["tool_name"].as_str().unwrap_or("?").to_string();
                     let input = req["input"].clone();
-                    // Showing a file in the conversation changes nothing and tells the model nothing: no prompt.
-                    if tool_name == crate::files_tool::TOOL {
+                    // Showing a file or the next-step box changes nothing and tells the model nothing: no prompt.
+                    if tool_name == crate::files_tool::TOOL || tool_name == crate::next_step::TOOL {
                         let mut resp = json!({ "behavior": "allow", "updatedInput": input });
                         if let Some(id) = req["tool_use_id"].as_str() {
                             resp["toolUseID"] = json!(id);
@@ -1231,7 +1236,8 @@ impl Hub {
                     });
                 } else if req["subtype"] == "mcp_message" && req["server_name"] == crate::files_tool::SERVER {
                     let cwd = self.sessions.lock().unwrap().get(sid).map(|s| s.p.cwd.clone()).unwrap_or_default();
-                    let response = crate::files_tool::handle(&cwd, &req["message"]);
+                    let next_step = self.settings.lock().unwrap().next_step;
+                    let response = crate::files_tool::handle(&cwd, &req["message"], next_step);
                     self.reply_async(sid, control_success(&rid, json!({ "mcp_response": response })));
                 } else {
                     // hook_callback, mcp_message (other servers), elicitation… not supported:

@@ -7,6 +7,36 @@ export const deleteNote = () => t("It goes to the Trash and also disappears from
 export const SIM_TOOL = "mcp__ios-simulator__control";
 /** The tool the app serves to show files in the conversation (src-tauri/src/files_tool.rs). */
 export const FILES_TOOL = "mcp__harness__send_files";
+/** The tool that ends a turn with a next-step box (src-tauri/src/next_step.rs). */
+export const NEXT_STEP_TOOL = "mcp__harness__next_step";
+
+/** The box drawn after a turn: a click on a button sends its message, not its label. */
+export interface NextStep {
+  /** The tool call it comes from: a refused call takes its box away. */
+  id: string;
+  recap: string;
+  ask: string;
+  buttons: { label: string; message: string }[];
+}
+
+/** The box a `next_step` call asks for, or null if its input is not complete. */
+export function nextStepOf(id: string, input: string): NextStep | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(input);
+  } catch {
+    return null;
+  }
+  const o = (raw ?? {}) as { recap?: unknown; ask?: unknown; buttons?: unknown };
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const buttons = (Array.isArray(o.buttons) ? o.buttons : [])
+    .map((b) => ({ label: str((b as { label?: unknown })?.label), message: str((b as { message?: unknown })?.message) }))
+    .filter((b) => b.label && b.message)
+    .slice(0, 2);
+  const ask = str(o.ask);
+  if (!ask || !buttons.length) return null;
+  return { id, recap: str(o.recap), ask, buttons };
+}
 
 /** The files Claude wants to show, and the line that goes with them. */
 export function sentFiles(input: string): { files: string[]; caption: string } {

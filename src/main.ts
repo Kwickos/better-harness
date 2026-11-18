@@ -2,7 +2,7 @@ import { fmtMb, fmtNumber, lang, onLangChange, setLang, t, tp, translateDom } fr
 import "./errors";
 import { tauriApi, type UpdateState, type UsageWindows, type Api, type ContextUsage, type HistoryEntry, type PermissionEv, type ProcStat, type SessionInfo, type Settings, type UiEvent } from "./api";
 import { icon, type IconName } from "./icons";
-import { deleteNote, effectiveEffort, effortLabel, effortLevels, isCurrentModel, modes, modeOf, modelChoices, modelsCli, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
+import { deleteNote, effectiveEffort, effortLabel, effortLevels, isCurrentModel, modes, modeOf, modelChoices, modelsCli, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction, NEXT_STEP_TOOL, nextStepOf, type NextStep } from "./labels";
 import { closeMenu, confirmMenu, menuElement, menuItem, onMenuChange, segmented, showMenu, type MenuEntry } from "./menu";
 import { animateOut, DUR, enter, flipY, goLive, heightIn, heightOut, iconIn, leave, motionLive, swapText, textIn } from "./motion";
 import { initComposer } from "./composer";
@@ -705,6 +705,64 @@ function renderComposer() {
   setShown($("send"), !busy || has);
   ($("send") as HTMLButtonElement).disabled = !has;
   renderContext();
+  renderNextStep();
+}
+
+// ---------------------------------------------------------------- next step
+
+let nextCard: HTMLElement | null = null;
+let nextKey = "";
+
+/** The box of the last turn, while there is nothing else to do: Claude idle, no request waiting. */
+function shownNextStep(): NextStep | null {
+  const v = activeView();
+  if (!v?.nextStep || v.info.state === "busy" || v.perms.size > 0) return null;
+  return v.nextStep;
+}
+
+function renderNextStep() {
+  const step = shownNextStep();
+  const key = step ? `${active}\n${lang()}\n${step.id}` : "";
+  if (key === nextKey) return;
+  nextKey = key;
+  const old = nextCard;
+  nextCard = null;
+  if (old) void heightOut(old).then(() => old.remove());
+  if (!step) return;
+  const card = nextStepBox(step);
+  nextCard = card;
+  $("next-step").append(card);
+  void heightIn(card);
+}
+
+/** Recap, question, buttons. A button sends its full message, which its tooltip shows. */
+function nextStepBox(step: NextStep): HTMLElement {
+  const card = el("div", "next");
+  const close = el("button", "icon-btn sm next-close");
+  close.type = "button";
+  close.title = t("Close");
+  close.setAttribute("aria-label", t("Close"));
+  close.innerHTML = icon("close");
+  close.addEventListener("click", () => dismissNextStep());
+  if (step.recap) card.append(el("p", "next-recap", step.recap));
+  const actions = el("div", "next-actions");
+  step.buttons.forEach((b, i) => {
+    const btn = el("button", i === 0 ? "btn btn-primary" : "btn next-alt", b.label);
+    btn.type = "button";
+    btn.title = b.message;
+    btn.addEventListener("click", () => void sendText(b.message));
+    actions.append(btn);
+  });
+  card.append(el("p", "next-ask", step.ask), actions, close);
+  return card;
+}
+
+function dismissNextStep(): boolean {
+  const v = activeView();
+  if (!v || !shownNextStep()) return false;
+  v.nextStep = null;
+  renderNextStep();
+  return true;
 }
 
 /** Context gauge: a discreet ring, details on click. */
@@ -1046,6 +1104,7 @@ function renderPerms() {
     if (question && !composer.text().trim()) question.querySelector<HTMLElement>(".q-option")?.focus({ preventScroll: true });
   }
   renderWorking();
+  renderNextStep();
 }
 
 const permVerbs = (): Record<string, string> => ({
@@ -1275,6 +1334,7 @@ async function loadHistoryInto(v: SessionView, cliId: string, mount = true) {
 function applyToView(v: SessionView, ev: UiEvent): { item?: Item; added?: BlockView[]; tool?: ToolView } {
   switch (ev.kind) {
     case "user":
+      v.nextStep = null;
       return { item: v.addUser(ev.text) };
     case "assistant":
       if (ev.parent) {
@@ -1283,8 +1343,11 @@ function applyToView(v: SessionView, ev: UiEvent): { item?: Item; added?: BlockV
         return { tool: parent };
       }
       v.stream = { text: "", thinking: false };
+      for (const b of ev.blocks) if (b.t === "tool" && b.name === NEXT_STEP_TOOL) v.nextStep = nextStepOf(b.id, b.input) ?? v.nextStep;
       return v.addAssistant(ev.id, ev.blocks);
     case "toolResult":
+      // A refused box (input to fix) is not shown: the model calls again.
+      if (ev.isError && v.nextStep?.id === ev.toolUseId) v.nextStep = null;
       return { tool: v.addToolResult(ev) };
     default:
       return {};
@@ -1411,6 +1474,8 @@ async function sendText(text: string) {
     v = view(info);
     await activate(info.sid);
   }
+  v.nextStep = null;
+  renderNextStep();
   renderer.upsert(v.addUser(text));
   void guard(api.send(v.info.sid, text));
 }
@@ -1430,7 +1495,9 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (menuElement()) return;
     const v = activeView();
-    if (v?.info.state === "busy" && !document.querySelector("dialog[open]") && document.activeElement !== $("search")) void guard(api.interrupt(v.info.sid));
+    if (document.querySelector("dialog[open]") || document.activeElement === $("search")) return;
+    if (v?.info.state === "busy") void guard(api.interrupt(v.info.sid));
+    else dismissNextStep();
     return;
   }
   if (!e.metaKey) return;
