@@ -51,8 +51,21 @@ export const VERSION_FILES = ["package.json", "package-lock.json", "src-tauri/Ca
 // ------------------------------------------------------------ conventions
 
 /** Returns the reason for refusal, or null if the branch name is valid. */
+/**
+ * Release channels, next to main (development): each points to the last published release of its kind.
+ * Only npm run release moves them, forward, onto a tagged commit of main.
+ */
+export const CHANNELS = ["beta", "stable"];
+
+/** Can `channel` point to a commit carrying `tags`? stable: a stable version tag; beta: any version tag. */
+export function channelAccepts(channel, tags) {
+  const versions = tags.filter((t) => /^v/.test(t) && VERSION.test(t.slice(1)));
+  return channel === "stable" ? versions.some((t) => !t.includes("-beta.")) : versions.length > 0;
+}
+
 export function checkBranch(name) {
   if (name === MAIN) return `${MAIN} only receives PRs merged with squash, never a direct push.`;
+  if (CHANNELS.includes(name)) return `${name} is a release channel: only npm run release moves it.`;
   const [prefix, ...rest] = name.split("/");
   const subject = rest.join("/");
   if (prefix === "release") {
@@ -171,6 +184,17 @@ function commitMsg(file) {
   return CO_AUTHOR.test(message) ? [`Co-authored-by trailer not allowed: ${OWNER} is the only author.`] : [];
 }
 
+/** A channel moves forward only, onto a commit of main tagged with a release of its kind. */
+function checkChannelMove(name, localSha, remoteSha) {
+  if (localSha === ZERO) return [`${name} is a release channel: it is never deleted.`];
+  const commit = git("rev-parse", `${localSha}^{commit}`);
+  const tags = git("tag", "--points-at", commit).split("\n").filter(Boolean);
+  if (!gitOk("merge-base", "--is-ancestor", commit, `refs/remotes/origin/${MAIN}`)) return [`${name} only points to commits of origin/${MAIN}.`];
+  if (!channelAccepts(name, tags)) return [`${name} only points to a commit tagged with a ${name === "stable" ? "stable " : ""}release (v<version>): npm run release moves it.`];
+  if (remoteSha !== ZERO && !gitOk("merge-base", "--is-ancestor", remoteSha, commit)) return [`${name} only moves forward (fetch first if it moved on GitHub).`];
+  return [];
+}
+
 function prePush(url, lines) {
   if (!isOfficialRemote(url)) return [`${url} is not ${REPO}.`];
   try {
@@ -188,6 +212,10 @@ function prePush(url, lines) {
       const name = ref.slice("refs/heads/".length);
       if (name === MAIN) {
         problems.push(`${MAIN} only receives PRs merged with squash: push a branch and open a PR.`);
+        continue;
+      }
+      if (CHANNELS.includes(name)) {
+        problems.push(...checkChannelMove(name, localSha, remoteSha));
         continue;
       }
       if (deletion) continue;

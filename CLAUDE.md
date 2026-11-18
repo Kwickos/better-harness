@@ -3,6 +3,7 @@
 The repository rules are in [CONTRIBUTING.md](CONTRIBUTING.md). GitHub enforces them, and a hook blocks the commands that get around them. In short:
 
 - Never commit or push to `main`. Work on the session's branch (`features/…`) or on a `<type>/<subject>` branch.
+- `beta` and `stable` are release channels: only `npm run release` moves them. Never push to them.
 - PR title: `<type>: <description>`, with a type among feat, fix, perf, refactor, docs, test, build, ci, chore, revert. It becomes the commit on `main`.
 - Commits by `Kwickos <126871467+Kwickos@users.noreply.github.com>`, without `Co-authored-by`.
 - Squash merge only (`gh pr merge --squash`).

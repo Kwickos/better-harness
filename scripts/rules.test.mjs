@@ -1,8 +1,13 @@
 // Tests of the repository rules and of the Claude session guard: node --test scripts/rules.test.mjs
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { analyze, commands, parse } from "../.claude/hooks/git-guard.mjs";
-import { checkBranch, checkTitle, compareVersions, singleVersion } from "./rules.mjs";
+import { EMAIL, channelAccepts, checkBranch, checkTitle, compareVersions, singleVersion } from "./rules.mjs";
 
 test("branch names", () => {
   for (const ok of ["feat/beta-channel", "fix/scroll", "features/regles-travail-release-abe25c", "docs/readme", "release/v0.2.0", "release/v1.0.0-beta.3", "chore/bump.deps"]) {
@@ -11,6 +16,21 @@ test("branch names", () => {
   for (const no of ["main", "beta-channel", "feature/x", "feat/", "feat/Beta", "feat/a b", "feat/a/b", "release/0.2.0", "release/v0.2", "release/v1.0.0-rc.1", "wip/x", `feat/${"a".repeat(60)}`]) {
     assert.notEqual(checkBranch(no), null, no);
   }
+});
+
+test("release channels", () => {
+  assert.notEqual(checkBranch("beta"), null);
+  assert.notEqual(checkBranch("stable"), null);
+  assert.ok(channelAccepts("stable", ["v0.2.0"]));
+  assert.ok(!channelAccepts("stable", ["v0.3.0-beta.1"]));
+  assert.ok(channelAccepts("beta", ["v0.3.0-beta.1"]));
+  assert.ok(channelAccepts("beta", ["v0.2.0"]));
+  assert.ok(!channelAccepts("beta", ["essai"]));
+  assert.ok(!channelAccepts("stable", []));
+  for (const cmd of ["git push origin main:beta", "git push origin HEAD:stable", "git push origin v0.2.0:refs/heads/stable", "git push origin :beta", "git push origin --delete stable", "git push -f origin feat/x:beta"]) {
+    assert.notEqual(analyze(cmd, "/repo", ctx), null, cmd);
+  }
+  assert.notEqual(analyze("git push", "/repo", { ...ctx, branch: () => "beta" }), null);
 });
 
 test("PR titles", () => {
@@ -336,5 +356,34 @@ test("guard: includes and git config files", () => {
   }
   for (const cmd of ["cat .git/config", "git config --get alias.st", "git config --list", "git config --get-regexp alias", "cat ~/.gitconfig", "echo x > /tmp/config", "grep x .git/config > /tmp/out", "git log 2>&1 | head", "GIT_CONFIG_GLOBAL=/dev/null git status", "GIT_CONFIG_NOSYSTEM=1 git status"]) {
     assert.equal(analyze(cmd, "/repo", ctx), null, cmd);
+  }
+});
+
+test("pre-push: release channels move forward, onto release commits of main", () => {
+  const dir = mkdtempSync(join(tmpdir(), "bh-channels-"));
+  try {
+    const git = (...args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
+    git("init", "-q", "-b", "main");
+    git("config", "user.name", "Kwickos");
+    git("config", "user.email", EMAIL);
+    const commit = (message, tag) => {
+      git("commit", "-q", "--allow-empty", "-m", message);
+      if (tag) git("tag", tag);
+      return git("rev-parse", "HEAD");
+    };
+    const [stable, beta, untagged] = [commit("A", "v0.1.0"), commit("B", "v0.2.0-beta.1"), commit("C")];
+    git("update-ref", "refs/remotes/origin/main", untagged);
+    const zero = "0".repeat(40);
+    const rules = fileURLToPath(new URL("./rules.mjs", import.meta.url));
+    const accepted = (line) =>
+      spawnSync(process.execPath, [rules, "pre-push", "origin", "https://github.com/Kwickos/better-harness.git"], { cwd: dir, input: `${line}\n`, encoding: "utf8" }).status === 0;
+    assert.ok(accepted(`refs/heads/stable ${stable} refs/heads/stable ${zero}`), "stable created on a stable release");
+    assert.ok(!accepted(`refs/heads/stable ${beta} refs/heads/stable ${stable}`), "stable never takes a beta");
+    assert.ok(accepted(`refs/heads/beta ${beta} refs/heads/beta ${stable}`), "beta moves to a beta release");
+    assert.ok(!accepted(`refs/heads/beta ${untagged} refs/heads/beta ${beta}`), "no channel on an untagged commit");
+    assert.ok(!accepted(`refs/heads/beta ${stable} refs/heads/beta ${beta}`), "channels never move back");
+    assert.ok(!accepted(`(delete) ${zero} refs/heads/beta ${beta}`), "channels are never deleted");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
