@@ -217,6 +217,8 @@ export interface Settings {
   recentDirs: string[];
   /** "en" (default), "fr" or "system" (src/i18n.ts). */
   language: string;
+  /** beta also receives the pre-releases (src-tauri/src/updates.rs). */
+  updateChannel: "stable" | "beta";
 }
 
 /** State of automatic updates (src-tauri/src/updates.rs). */

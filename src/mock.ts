@@ -86,6 +86,7 @@ let settings: Settings = {
   allTools: false,
   cliAutoUpdate: true,
   recentDirs: ["/Users/demo/Code/better-harness", "/Users/demo/Code/billing-api", "/Users/demo/Code/studio-site", "/Users/demo/Code/ws", "/Users/demo/Archive/ws", "/Users/demo/Code/internal-tools", "/Users/demo/Code/marketing-site"],
+  updateChannel: "stable",
   // Settings live in memory here: keep the language across reloads, like the real app does.
   language: (() => {
     try {
@@ -448,6 +449,8 @@ export const mockApi: Api = {
   },
   getSettings: async () => ({ ...settings }),
   saveSettings: async (s) => {
+    // Like the app: changing channel drops the version downloaded for the other one.
+    if (s.updateChannel !== settings.updateChannel) setMockUpdate({ state: "idle" });
     settings = s;
   },
   setLanguage: async () => undefined,

@@ -33,6 +33,8 @@ pub struct Settings {
     pub recent_dirs: Vec<String>,
     /// Interface language: "en" (default), "fr", or "system" (macOS preferred languages).
     pub language: String,
+    /// "stable" (default) or "beta": beta also receives the pre-releases.
+    pub update_channel: String,
 }
 
 /// CLI tools loaded in every request though they are rarely used: Workflow
@@ -57,6 +59,7 @@ impl Default for Settings {
             all_tools: false,
             recent_dirs: vec![],
             language: "en".into(),
+            update_channel: "stable".into(),
         }
     }
 }

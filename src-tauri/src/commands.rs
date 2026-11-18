@@ -142,8 +142,14 @@ pub fn set_language(lang: String) {
 }
 
 #[tauri::command]
-pub fn save_settings(hub: H<'_>, settings: Settings) -> Result<(), String> {
-    hub.save_settings(settings)
+pub fn save_settings(app: tauri::AppHandle, hub: H<'_>, updates: Up<'_>, settings: Settings) -> Result<(), String> {
+    let switched = hub.settings.lock().unwrap().update_channel != settings.update_channel;
+    hub.save_settings(settings)?;
+    if switched {
+        let updates = updates.inner().clone();
+        tauri::async_runtime::spawn(async move { updates.switch_channel(&app).await });
+    }
+    Ok(())
 }
 
 #[derive(Serialize)]
