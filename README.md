@@ -73,7 +73,8 @@ The script stops if gh, git or the remote aren't Kwickos, if there are uncommitt
 3. it checks that each binary runs on macOS 13;
 4. it signs the update package with `~/.tauri/better-harness.key` (password in the Keychain, item "better-harness updater key");
 5. it opens the `release: v<version>` PR, waits for CI, then squash-merges it;
-6. it tags that commit on `main`, then creates the release with the `.dmg`, the `.app.tar.gz` and `latest.json`.
+6. it tags that commit on `main`, then creates the release with the `.dmg`, the `.app.tar.gz` and `latest.json`;
+7. it moves the `beta` branch onto it, and `stable` too for a stable version.
 
 **Back up the key and its password.** Without them, installed apps can no longer update.
 

@@ -8,7 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { MAIN, PREFIXES, REPO } from "./rules.mjs";
+import { channelAccepts, CHANNELS, compareVersions, MAIN, PREFIXES, REPO, VERSION } from "./rules.mjs";
 
 /** ID of the GitHub Actions app: only its checks satisfy the required statuses. */
 const GITHUB_ACTIONS = 15368;
@@ -62,9 +62,18 @@ export const RULESETS = [
     enforcement: "active",
     bypass_actors: [],
     conditions: {
-      ref_name: { include: ["~ALL"], exclude: ["~DEFAULT_BRANCH", ...PREFIXES.map((p) => `refs/heads/${p}/*`), "refs/heads/release/v*"] },
+      ref_name: { include: ["~ALL"], exclude: ["~DEFAULT_BRANCH", ...CHANNELS.map((c) => `refs/heads/${c}`), ...PREFIXES.map((p) => `refs/heads/${p}/*`), "refs/heads/release/v*"] },
     },
     rules: [{ type: "creation" }],
+  },
+  {
+    // beta and stable only move forward (npm run release pushes them), and never disappear.
+    name: "release channels",
+    target: "branch",
+    enforcement: "active",
+    bypass_actors: [],
+    conditions: { ref_name: { include: CHANNELS.map((c) => `refs/heads/${c}`), exclude: [] } },
+    rules: [{ type: "deletion" }, { type: "non_fast_forward" }, { type: "required_linear_history" }],
   },
   {
     name: "immutable tags",
@@ -111,6 +120,25 @@ function githubRulesets() {
 }
 
 /** Differences between GitHub and this file (empty when everything is in place). */
+/** Version tags of GitHub, and the newest one each channel accepts. */
+function releaseTags() {
+  const tags = api([`repos/${REPO}/tags`, "--paginate", "--slurp"]).flat();
+  const newest = (channel) =>
+    tags
+      .filter((t) => /^v/.test(t.name) && VERSION.test(t.name.slice(1)) && channelAccepts(channel, [t.name]))
+      .sort((a, b) => compareVersions(b.name.slice(1), a.name.slice(1)))[0];
+  return { tags, newest };
+}
+
+/** Commit a channel branch points to on GitHub, or null if it doesn't exist yet. */
+function channelSha(channel) {
+  try {
+    return api([`repos/${REPO}/git/ref/heads/${channel}`]).object.sha;
+  } catch {
+    return null;
+  }
+}
+
 export function verify() {
   const gaps = [];
   const repo = api([`repos/${REPO}`]);
@@ -132,6 +160,16 @@ export function verify() {
       const r = actual.rules.find((x) => x.type === rule.type);
       if (!r || !contains(rule.parameters ?? {}, r.parameters ?? {})) gaps.push(`ruleset "${expected.name}": rule ${rule.type} missing or changed`);
     }
+  }
+  const { tags, newest } = releaseTags();
+  for (const channel of CHANNELS) {
+    const sha = channelSha(channel);
+    // No release of this kind yet: the branch appears with the first one.
+    if (!sha) {
+      if (newest(channel)) gaps.push(`branch ${channel} missing`);
+      continue;
+    }
+    if (!channelAccepts(channel, tags.filter((t) => t.commit.sha === sha).map((t) => t.name))) gaps.push(`branch ${channel} does not point to a ${channel} release`);
   }
   return gaps;
 }
@@ -167,6 +205,17 @@ function apply() {
     const id = find(ruleset)?.id;
     api(id ? [`repos/${REPO}/rulesets/${id}`, "-X", "PUT"] : [`repos/${REPO}/rulesets`, "-X", "POST"], ruleset);
     console.log(`ruleset "${ruleset.name}" ${id ? "updated" : "created"}`);
+  }
+  const { newest } = releaseTags();
+  for (const channel of CHANNELS) {
+    if (channelSha(channel)) continue;
+    const tag = newest(channel);
+    if (!tag) {
+      console.log(`branch ${channel}: no ${channel} release yet, it appears with the first one`);
+      continue;
+    }
+    api([`repos/${REPO}/git/refs`, "-X", "POST"], { ref: `refs/heads/${channel}`, sha: tag.commit.sha });
+    console.log(`branch ${channel} created at ${tag.name}`);
   }
   const gaps = verify();
   if (gaps.length) throw new Error(`applied, but GitHub still differs:\n- ${gaps.join("\n- ")}`);

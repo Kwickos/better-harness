@@ -61,7 +61,12 @@ if (drift.length) fail(`the GitHub protections changed, no release without them 
 
 const current = singleVersion();
 const remoteTag = !!run("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`]);
-if (remoteTag && attempt("gh", ["release", "view", tag, "--repo", REPO]).status === 0) fail(`${tag} is already published.`);
+// Already published: only the channel branches may be left to move (a run stopped right after publishing).
+if (remoteTag && attempt("gh", ["release", "view", tag, "--repo", REPO]).status === 0) {
+  if (dryRun) console.log(`${tag} is already published: its channel branches would be checked.`);
+  else moveChannels(run("git", ["rev-parse", `${tag}^{commit}`]));
+  process.exit(0);
+}
 
 // Is the version PR already merged? Then resume at publishing.
 const releaseCommit = run("git", ["log", `origin/${MAIN}`, "--format=%H %s"])
@@ -80,7 +85,8 @@ if (releaseCommit) {
 }
 console.log(`${OWNER} · ${REPO} · ${current} → ${version}${beta ? " (beta)" : ""} · protections in place`);
 if (dryRun) {
-  console.log(stage === "prepare" ? `\nTo do: branch ${branch}, build, PR "${title}", CI, squash merge, tag ${tag}, release.` : `\nTo do: build of ${releaseCommit.slice(0, 7)}, tag ${tag}, release.`);
+  const moved = beta ? "beta" : "beta and stable";
+  console.log(stage === "prepare" ? `\nTo do: branch ${branch}, build, PR "${title}", CI, squash merge, tag ${tag}, release, move ${moved}.` : `\nTo do: build of ${releaseCommit.slice(0, 7)}, tag ${tag}, release, move ${moved}.`);
   process.exit(0);
 }
 
@@ -226,6 +232,18 @@ function publish(commit, built) {
   const channel = beta ? ["--prerelease", "--latest=false"] : ["--latest"];
   run("gh", ["release", "create", tag, ...assets, "--repo", REPO, "--verify-tag", "--title", `Better Harness ${version}`, ...channel, ...notesArgs], { stdio: "inherit" });
   console.log(`\n${tag} published${beta ? " as a beta" : ""}: https://github.com/${REPO}/releases/tag/${tag}`);
+  moveChannels(commit);
+}
+
+/** beta follows every release, stable only stable ones: both move forward to the released commit. */
+function moveChannels(commit) {
+  const channels = beta ? ["beta"] : ["beta", "stable"];
+  const behind = channels.filter((c) => {
+    attempt("git", ["fetch", "--quiet", "origin", `+refs/heads/${c}:refs/remotes/origin/${c}`]);
+    return attempt("git", ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${c}`]).stdout.trim() !== commit;
+  });
+  if (behind.length) run("git", ["push", "--quiet", "origin", ...behind.map((c) => `${commit}:refs/heads/${c}`)], { stdio: "inherit" });
+  console.log(`${channels.join(" and ")} → ${tag}`);
 }
 
 if (stage === "prepare") publish(prepare(), true);

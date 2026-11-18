@@ -73,7 +73,8 @@ Le script s'arrête si gh, git ou le remote ne sont pas Kwickos, si des modifica
 3. il vérifie que chaque binaire démarre sur macOS 13 ;
 4. il signe le paquet de mise à jour avec `~/.tauri/better-harness.key` (mot de passe dans le Trousseau, élément « better-harness updater key ») ;
 5. il ouvre la PR `release: v<version>`, attend la CI, puis la merge en squash ;
-6. il tague ce commit de `main`, puis crée la release avec le `.dmg`, le `.app.tar.gz` et `latest.json`.
+6. il tague ce commit de `main`, puis crée la release avec le `.dmg`, le `.app.tar.gz` et `latest.json` ;
+7. il y fait avancer la branche `beta`, et `stable` aussi pour une version stable.
 
 **Sauvegarde la clé et son mot de passe.** Sans eux, les apps déjà installées ne pourront plus se mettre à jour.
 

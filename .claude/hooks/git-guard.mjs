@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EMAIL, MAIN, OWNER, checkTitle, hooksDir } from "../../scripts/rules.mjs";
+import { CHANNELS, EMAIL, MAIN, OWNER, checkTitle, hooksDir } from "../../scripts/rules.mjs";
 
 const RELEASE = "tags and releases are only created by npm run release (see CONTRIBUTING.md)";
 const HOOKS_OFF = "the repository's git hooks stay on.";
@@ -287,10 +287,12 @@ function checkGitCommand(sub, rest, cwd, ctx, appended) {
     const refs = positionals.slice(1);
     if (refs.some((x) => EXPANSION.test(x))) return "write the refs to push literally (no variable, brace or wildcard).";
     if (!refs.length && branch === MAIN) return `${MAIN} only receives PRs merged with squash.`;
+    if (!refs.length && CHANNELS.includes(branch)) return `${branch} is a release channel: only npm run release moves it.`;
     for (const ref of refs) {
       const target = (ref.includes(":") ? ref.split(":")[1] || ref.split(":")[0] : ref).replace(/^\+/, "");
       const name = target === "HEAD" ? branch : target.replace(/^refs\/heads\//, "");
       if (name === MAIN) return `${MAIN} only receives PRs merged with squash.`;
+      if (CHANNELS.includes(name)) return `${name} is a release channel: only npm run release moves it.`;
       if (target.startsWith("refs/tags/") || /^v\d/.test(target)) return `${RELEASE}.`;
       if (deletes && /^v\d/.test(name)) return `${RELEASE}.`;
     }
