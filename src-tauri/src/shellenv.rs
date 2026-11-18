@@ -58,6 +58,19 @@ fn is_executable(p: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// What `claude --version` prints (`2.1.327 (Claude Code)`), or `None` if it does not answer.
+pub async fn claude_version(claude: &Path) -> Option<String> {
+    let mut cmd = Command::new(claude);
+    cmd.arg("--version")
+        .env("PATH", path().await)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    let out = tokio::time::timeout(Duration::from_secs(8), cmd.output()).await.ok()?.ok()?;
+    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !v.is_empty()).then_some(v)
+}
+
 /// Finds the `claude` binary: explicit setting, then shell PATH, then known locations.
 pub async fn resolve_claude(explicit: Option<&str>) -> Option<PathBuf> {
     if let Some(p) = explicit.filter(|s| !s.trim().is_empty()) {

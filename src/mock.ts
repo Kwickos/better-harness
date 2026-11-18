@@ -1,6 +1,6 @@
 // Simulated backend, loaded only outside Tauri (browser): lets you work on
 // the design and rendering (streaming, tools, permissions) without starting the CLI.
-import type { Api, Attachment, UpdateState, Block, GitFile, HistoryEntry, ServerInfo, SessionInfo, SimDevice, Settings, UiEvent, Worktree, WorktreeState } from "./api";
+import type { Api, Attachment, CliUpdateState, UpdateState, Block, GitFile, HistoryEntry, ServerInfo, SessionInfo, SimDevice, Settings, UiEvent, Worktree, WorktreeState } from "./api";
 
 let emit: (e: UiEvent) => void = () => {};
 const now = Date.now();
@@ -114,6 +114,7 @@ let settings: Settings = {
   mcpSelected: [],
   partialMessages: true,
   allTools: false,
+  cliAutoUpdate: true,
   recentDirs: ["/Users/demo/Code/better-harness", "/Users/demo/Code/billing-api", "/Users/demo/Code/studio-site", "/Users/demo/Code/ws", "/Users/demo/Archive/ws", "/Users/demo/Code/internal-tools", "/Users/demo/Code/marketing-site"],
   worktreePrefix: "claude",
   worktreeDefault: false,
@@ -178,12 +179,13 @@ const REPLY_2 = `Done. The composer now groups the text, the model and the mode:
 Want me to apply the same logic to the new session dialog?`;
 
 const LEVELS = ["low", "medium", "high", "xhigh", "max"];
+// Same shape as the CLI's answer to `initialize` (2.1.327): Fable comes as a full id, not an alias.
 const MODELS = [
-  { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)", description: "Opus 5.5 · for complex everyday tasks", supportedEffortLevels: LEVELS },
-  { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1", description: "Most capable, for long and difficult tasks", supportedEffortLevels: LEVELS },
-  { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5", description: "For complex everyday tasks", supportedEffortLevels: LEVELS },
-  { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet 5.5", description: "Efficient for routine tasks", supportedEffortLevels: LEVELS },
-  { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku 5.5", description: "Fastest", supportedEffortLevels: LEVELS },
+  { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)", description: "Opus 5.5 · Best for everyday, complex tasks", supportedEffortLevels: LEVELS },
+  { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus", description: "Opus 5.5 · Best for everyday, complex tasks", supportedEffortLevels: LEVELS },
+  { value: "claude-fable-5-2[1m]", resolvedModel: "claude-fable-5-2", displayName: "Fable", description: "Fable 5.2 · Most capable for your hardest and longest-running tasks", supportedEffortLevels: LEVELS },
+  { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet", description: "Sonnet 5.5 · Efficient for routine tasks", supportedEffortLevels: LEVELS },
+  { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku", description: "Haiku 5.5 · Fastest for quick answers", supportedEffortLevels: LEVELS },
 ];
 
 const servers = new Map<string, ServerInfo>();
@@ -349,6 +351,13 @@ const setMockUpdate = (s: UpdateState) => {
   for (const cb of updateListeners) cb(s);
 };
 
+let mockCliUpdate: CliUpdateState = { state: "upToDate", version: "2.1.319" };
+const cliUpdateListeners = new Set<(s: CliUpdateState) => void>();
+const setMockCliUpdate = (s: CliUpdateState) => {
+  mockCliUpdate = s;
+  for (const cb of cliUpdateListeners) cb(s);
+};
+
 export const mockApi: Api = {
   subscribe: async (cb) => {
     emit = cb;
@@ -430,6 +439,7 @@ export const mockApi: Api = {
     if (cwd === SCRATCH) return [];
     return ["src/", "docs/", "README.md", "package.json", "src/main.ts", "src/styles.css", "src/composer.ts", "docs/release notes.md"].filter((p) => p.toLowerCase().includes(query.toLowerCase()));
   },
+  cliModels: async () => MODELS,
   cliDefaults: async () => ({ model: null, effort: "xhigh" }),
   gitStatus: async (cwd) =>
     cwd === SCRATCH || cwd.includes("scripts")
@@ -632,6 +642,16 @@ export const mockApi: Api = {
   updateInstall: async () => location.reload(),
   onUpdate: async (cb) => {
     updateListeners.add(cb);
+  },
+  cliUpdateStatus: async () => mockCliUpdate,
+  cliUpdateCheck: async () => {
+    setMockCliUpdate({ state: "checking" });
+    await sleep(1200);
+    setMockCliUpdate({ state: "updated", from: "2.1.319", version: "2.1.327" });
+    return mockCliUpdate;
+  },
+  onCliUpdate: async (cb) => {
+    cliUpdateListeners.add(cb);
   },
   appInfo: async () => ({ version: "0.1.0", claudePath: "/Users/demo/.local/bin/claude", claudeVersion: "2.1.319 (Claude Code)", home: "/Users/demo" }),
 };

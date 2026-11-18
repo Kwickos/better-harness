@@ -12,6 +12,8 @@ pub struct Settings {
     pub settings_version: u32,
     /// Explicit path to the `claude` binary (otherwise resolved through the shell PATH).
     pub claude_path: Option<String>,
+    /// Runs `claude update` at launch, then every 6 hours (src-tauri/src/cli_updates.rs).
+    pub cli_auto_update: bool,
     /// Max number of CLI processes alive at once. Beyond that, the oldest idle
     /// session is suspended (and resumed with --resume).
     pub max_live: usize,
@@ -47,6 +49,7 @@ impl Default for Settings {
         Self {
             settings_version: SETTINGS_VERSION,
             claude_path: None,
+            cli_auto_update: true,
             max_live: 3,
             idle_minutes: 10,
             default_model: None,

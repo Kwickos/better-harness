@@ -56,6 +56,8 @@ xattr -dr com.apple.quarantine "/Applications/Better Harness.app"
 
 The app checks for a new version 20 s after launch, then every 6 hours. It reads `latest.json` from the latest release of this repository. A new version downloads in the background and its signature is verified. Then an **Update** button appears at the bottom of the sidebar. If you don't click it, the update installs when the app quits. **Settings → About** also lets you check by hand.
 
+The `claude` CLI is kept up to date too: 40 s after launch, then every 6 hours, the app runs `claude update`, which updates it the way it was installed and on its update channel. Running conversations keep their version until their next start. **Settings → General → Update automatically** turns this off, and **Settings → About** runs it by hand.
+
 ### Publish a version
 
 Versions are published from this Mac, under the **Kwickos** GitHub account only, from an up-to-date `main`:
@@ -101,7 +103,7 @@ Branches, PRs, CI and GitHub protections: see [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Worktrees, as in Claude Desktop.** In a git repository, the composer offers *Local* or *Worktree*. A worktree conversation works in `<repo>/.claude/worktrees/<name>`, on its own branch `<prefix>/<name>` (prefix `claude` by default, set in Settings), from the branch you pick. The untracked files listed in `.worktreeinclude` (`.env`…) are copied into it. It sits with its project in the sidebar, and the header shows its branch. Archiving or deleting the conversation removes a clean worktree; one with uncommitted changes stays on disk, and Settings → Worktrees removes it (its changes go to the Trash). A branch with commits of its own is always kept, and reopening the conversation brings its worktree back.
 - **Live Markdown.** Only the last block is recomputed while text is being written.
 - **Activity lines.** Consecutive tool calls collapse, for example into "2 files read, 1 command". While they run, the line shows the current step.
-- **Model and effort.** The models offered are the ones the CLI returns (`initialize`). There are 5 effort levels, applied live via `apply_flag_settings`, as in Claude Desktop.
+- **Model and effort.** The models offered are the ones the CLI returns (`initialize`), all of them, with no list written in the app: at launch, when no list is known yet or the CLI version changed, it asks the CLI before any conversation. There are 5 effort levels, applied live via `apply_flag_settings`, as in Claude Desktop.
 - **Opus advisor.** In the model menu, per conversation: the chosen model does the work and consults Opus at key moments (`--advisor opus` at launch, `advisorModel` live). Off by default.
 - **Agent world.** Above the input field, each Claude in the conversation is an animal (fox for Opus, cat for Sonnet, rabbit for Haiku, puppy for Fable) that walks to the station of what it is doing and says so in a bubble; subagents come in through the door and come back to report. Measured cost, window visible: about +2% CPU at rest (4 frames per second when everyone is asleep, 12 otherwise), nothing when the window is hidden. Can be turned off in Settings.
 - **Context gauge.** The breakdown by category (`get_context_usage`) is one click away, along with the "Compact" action.

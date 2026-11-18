@@ -239,6 +239,8 @@ export interface Metrics {
 export interface Settings {
   settingsVersion?: number;
   claudePath: string | null;
+  /** Runs `claude update` at launch, then every 6 hours. */
+  cliAutoUpdate: boolean;
   maxLive: number;
   idleMinutes: number;
   defaultModel: string | null;
@@ -261,6 +263,13 @@ export interface Settings {
 export type UpdateState =
   | { state: "idle" | "checking" | "upToDate" }
   | { state: "downloading" | "ready"; version: string }
+  | { state: "error"; message: string };
+
+/** State of the claude CLI updates (src-tauri/src/cli_updates.rs). */
+export type CliUpdateState =
+  | { state: "idle" | "checking" }
+  | { state: "upToDate"; version: string }
+  | { state: "updated"; from: string; version: string }
   | { state: "error"; message: string };
 
 export interface AppInfo {
@@ -305,6 +314,7 @@ export const tauriApi = {
   scratchDir: () => invoke<string>("scratch_dir"),
   appReady: () => invoke<void>("app_ready"),
   listCommands: (cwd: string) => invoke<{ name: string; description?: string | null }[]>("list_commands", { cwd }),
+  cliModels: (cwd: string) => invoke<ModelInfo[]>("cli_models", { cwd }),
   mentionFiles: (cwd: string, query: string) => invoke<string[]>("mention_files", { cwd, query }),
   cliDefaults: (cwd: string | null) => invoke<CliDefaults>("cli_defaults", { cwd }),
   gitStatus: (cwd: string) => invoke<GitStatus>("git_status", { cwd }),
@@ -370,6 +380,12 @@ export const tauriApi = {
   updateInstall: () => invoke<void>("update_install"),
   onUpdate: async (cb: (s: UpdateState) => void) => {
     await listen<UpdateState>("update", (e) => cb(e.payload));
+  },
+  cliUpdateStatus: () => invoke<CliUpdateState>("cli_update_status"),
+  /** Runs `claude update` now. */
+  cliUpdateCheck: () => invoke<CliUpdateState>("cli_update_check"),
+  onCliUpdate: async (cb: (s: CliUpdateState) => void) => {
+    await listen<CliUpdateState>("cli-update", (e) => cb(e.payload));
   },
 };
 
