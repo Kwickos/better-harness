@@ -1,6 +1,6 @@
 // Simulated backend, loaded only outside Tauri (browser): lets you work on
 // the design and rendering (streaming, tools, permissions) without starting the CLI.
-import type { Api, Attachment, UpdateState, Block, GitFile, HistoryEntry, ServerInfo, SessionInfo, SimDevice, Settings, UiEvent } from "./api";
+import type { Api, Attachment, CliUpdateState, UpdateState, Block, GitFile, HistoryEntry, ServerInfo, SessionInfo, SimDevice, Settings, UiEvent } from "./api";
 
 let emit: (e: UiEvent) => void = () => {};
 const now = Date.now();
@@ -84,6 +84,7 @@ let settings: Settings = {
   mcpSelected: [],
   partialMessages: true,
   allTools: false,
+  cliAutoUpdate: true,
   recentDirs: ["/Users/demo/Code/better-harness", "/Users/demo/Code/billing-api", "/Users/demo/Code/studio-site", "/Users/demo/Code/ws", "/Users/demo/Archive/ws", "/Users/demo/Code/internal-tools", "/Users/demo/Code/marketing-site"],
   // Settings live in memory here: keep the language across reloads, like the real app does.
   language: (() => {
@@ -315,6 +316,13 @@ const updateListeners = new Set<(s: UpdateState) => void>();
 const setMockUpdate = (s: UpdateState) => {
   mockUpdate = s;
   for (const cb of updateListeners) cb(s);
+};
+
+let mockCliUpdate: CliUpdateState = { state: "upToDate", version: "2.1.319" };
+const cliUpdateListeners = new Set<(s: CliUpdateState) => void>();
+const setMockCliUpdate = (s: CliUpdateState) => {
+  mockCliUpdate = s;
+  for (const cb of cliUpdateListeners) cb(s);
 };
 
 export const mockApi: Api = {
@@ -561,6 +569,16 @@ export const mockApi: Api = {
   updateInstall: async () => location.reload(),
   onUpdate: async (cb) => {
     updateListeners.add(cb);
+  },
+  cliUpdateStatus: async () => mockCliUpdate,
+  cliUpdateCheck: async () => {
+    setMockCliUpdate({ state: "checking" });
+    await sleep(1200);
+    setMockCliUpdate({ state: "updated", from: "2.1.319", version: "2.1.327" });
+    return mockCliUpdate;
+  },
+  onCliUpdate: async (cb) => {
+    cliUpdateListeners.add(cb);
   },
   appInfo: async () => ({ version: "0.1.0", claudePath: "/Users/demo/.local/bin/claude", claudeVersion: "2.1.319 (Claude Code)", home: "/Users/demo" }),
 };

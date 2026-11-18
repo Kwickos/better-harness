@@ -7,7 +7,6 @@ use crate::metrics::Metrics;
 use crate::settings::Settings;
 use serde::Serialize;
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::State;
 
@@ -160,17 +159,10 @@ pub struct AppInfo {
 pub async fn app_info(app: tauri::AppHandle, hub: H<'_>) -> Result<AppInfo, String> {
     let explicit = hub.settings.lock().unwrap().claude_path.clone();
     let path = crate::shellenv::resolve_claude(explicit.as_deref()).await;
-    let mut claude_version = None;
-    if let Some(p) = &path {
-        let mut cmd = tokio::process::Command::new(p);
-        cmd.arg("--version")
-            .env("PATH", crate::shellenv::path().await)
-            .stdin(std::process::Stdio::null())
-            .kill_on_drop(true);
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(8), cmd.output()).await {
-            claude_version = Some(String::from_utf8_lossy(&out.stdout).trim().to_string());
-        }
-    }
+    let claude_version = match &path {
+        Some(p) => crate::shellenv::claude_version(p).await,
+        None => None,
+    };
     Ok(AppInfo {
         version: app.package_info().version.to_string(),
         claude_path: path.map(|p| p.display().to_string()),
@@ -469,4 +461,19 @@ pub fn update_install(app: tauri::AppHandle, updates: Up<'_>) -> Result<(), Stri
         app.request_restart();
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------- claude CLI updates
+
+type CliUp<'a> = State<'a, Arc<crate::cli_updates::CliUpdates>>;
+
+#[tauri::command]
+pub fn cli_update_status(cli: CliUp<'_>) -> crate::cli_updates::CliUpdateState {
+    cli.state()
+}
+
+/// Runs `claude update` now.
+#[tauri::command]
+pub async fn cli_update_check(app: tauri::AppHandle, cli: CliUp<'_>) -> Result<crate::cli_updates::CliUpdateState, String> {
+    Ok(cli.check(&app).await)
 }
