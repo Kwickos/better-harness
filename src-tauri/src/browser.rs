@@ -1,18 +1,19 @@
-//! Navigateur intégré : une vraie WKWebView, enfant de la fenêtre principale,
-//! placée par l'UI dans le panneau de droite (l'UI ne dessine que la barre d'adresse).
-//! Les pages chargées n'ont aucun accès à l'IPC de l'app (pas de capacité accordée).
+//! Built-in browser: a real WKWebView, a child of the main window,
+//! placed by the UI in the right panel (the UI draws only the address bar).
+//! Loaded pages have no access to the app's IPC (no capability granted).
 
 use crate::events::UiEvent;
 use crate::hub::Hub;
+use crate::i18n::tr;
 use std::sync::Arc;
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
 const LABEL: &str = "browser";
-/// Une vue native ne se cache pas : elle part hors de la fenêtre.
+/// A native view cannot be hidden: it moves out of the window.
 pub const OFFSCREEN: f64 = -20_000.0;
 
-/// Place une vue enfant de la fenêtre, ou l'écarte quand un dialogue ou un autre onglet la recouvrirait.
+/// Places a child view of the window, or moves it away when a dialog or another tab would cover it.
 pub fn place(view: &tauri::Webview, x: f64, y: f64, w: f64, h: f64, visible: bool) {
     if visible && w > 1.0 && h > 1.0 {
         let _ = view.set_position(LogicalPosition::new(x, y));
@@ -28,7 +29,7 @@ pub struct Browser {
     hub: Arc<Hub>,
 }
 
-/// « localhost:3000 » → « http://localhost:3000 », « exemple.fr » → « https://exemple.fr ».
+/// "localhost:3000" → "http://localhost:3000", "example.com" → "https://example.com".
 pub fn normalize(input: &str) -> Result<tauri::Url, String> {
     let s = input.trim();
     let with_scheme = if s.contains("://") {
@@ -38,10 +39,10 @@ pub fn normalize(input: &str) -> Result<tauri::Url, String> {
     } else {
         format!("https://{s}")
     };
-    let url: tauri::Url = with_scheme.parse().map_err(|_| format!("Adresse invalide : {s}"))?;
+    let url: tauri::Url = with_scheme.parse().map_err(|_| tr(format!("Invalid address: {s}"), format!("Adresse invalide : {s}")))?;
     match url.scheme() {
         "http" | "https" => Ok(url),
-        other => Err(format!("Schéma non pris en charge : {other}")),
+        other => Err(tr(format!("Unsupported scheme: {other}"), format!("Schéma non pris en charge : {other}"))),
     }
 }
 
@@ -57,7 +58,7 @@ impl Browser {
             self.bounds(x, y, w, h, true);
             return Ok(url.to_string());
         }
-        let window = self.app.get_window("main").ok_or("Fenêtre principale introuvable")?;
+        let window = self.app.get_window("main").ok_or(tr("Main window not found", "Fenêtre principale introuvable"))?;
         let hub_nav = self.hub.clone();
         let hub_load = self.hub.clone();
         let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url.clone()))
@@ -77,7 +78,7 @@ impl Browser {
         Ok(url.to_string())
     }
 
-    /// Place la vue (ou la met de côté quand un dialogue ou un autre onglet la recouvrirait).
+    /// Places the view (or sets it aside when a dialog or another tab would cover it).
     pub fn bounds(&self, x: f64, y: f64, w: f64, h: f64, visible: bool) {
         if let Some(wv) = self.app.get_webview(LABEL) {
             place(&wv, x, y, w, h, visible);
@@ -85,12 +86,12 @@ impl Browser {
     }
 
     pub fn nav(&self, action: &str) -> Result<(), String> {
-        let wv = self.app.get_webview(LABEL).ok_or("Aucune page ouverte")?;
+        let wv = self.app.get_webview(LABEL).ok_or(tr("No page open", "Aucune page ouverte"))?;
         let js = match action {
             "back" => "history.back()",
             "forward" => "history.forward()",
             "reload" => "location.reload()",
-            _ => return Err(format!("Action inconnue : {action}")),
+            _ => return Err(tr(format!("Unknown action: {action}"), format!("Action inconnue : {action}"))),
         };
         wv.eval(js).map_err(|e| e.to_string())
     }

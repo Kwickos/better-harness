@@ -1,16 +1,16 @@
-// Pont vers un simulateur iOS : l'écran en direct et les touches, par les frameworks privés d'Xcode
-// (CoreSimulator et SimulatorKit, chargés à l'exécution : même approche que FBSimulatorControl, d'idb).
-// Un processus à part : l'app ne charge pas ces frameworks, et un changement d'Xcode ne peut pas la faire planter.
+// Bridge to an iOS simulator: the live screen and touches, through Xcode's private frameworks
+// (CoreSimulator and SimulatorKit, loaded at runtime: same approach as idb's FBSimulatorControl).
+// A separate process: the app does not load these frameworks, and an Xcode change cannot crash it.
 //
-// Usage : sim-bridge <udid> <dossier développeur> [images par seconde]
-// Sortie : suite de paquets [type : 1 octet][taille : 4 octets LE][données]. Type 0 : image JPEG. Type 1 : JSON.
-// Entrée, une commande par ligne :
-//   touch down <x> <y> [bord]    (fractions de l'écran, de 0 à 1 ; bord : 1 haut, 2 gauche, 3 bas, 4 droite)
+// Usage: sim-bridge <udid> <developer dir> [frames per second]
+// Output: a series of packets [type: 1 byte][size: 4 bytes LE][data]. Type 0: JPEG image. Type 1: JSON.
+// Input, one command per line:
+//   touch down <x> <y> [edge]    (fractions of the screen, from 0 to 1; edge: 1 top, 2 left, 3 bottom, 4 right)
 //   touch move|up <x> <y>
 //   home
-//   key down|up <code HID>
+//   key down|up <HID code>
 //   fps <n> | pause | resume
-// L'écran n'est encodé que s'il a changé, et rien ne tourne en pause. Fin de l'entrée = fin du processus.
+// The screen is encoded only when it changed, and nothing runs while paused. End of input = end of the process.
 import AppKit
 import CoreGraphics
 import Foundation
@@ -20,7 +20,7 @@ import UniformTypeIdentifiers
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 3 else {
-    FileHandle.standardError.write(Data("usage : sim-bridge <udid> <dossier développeur> [fps]\n".utf8))
+    FileHandle.standardError.write(Data("usage: sim-bridge <udid> <developer dir> [fps]\n".utf8))
     exit(64)
 }
 let udid = arguments[1]
@@ -28,14 +28,14 @@ let developerDir = arguments[2]
 var framesPerSecond = arguments.count > 3 ? Double(arguments[3]) ?? 15 : 15
 
 let output = FileHandle.standardOutput
-let outputQueue = DispatchQueue(label: "sortie")
+let outputQueue = DispatchQueue(label: "output")
 
 func send(kind: UInt8, _ data: Data) {
     var header = Data([kind])
     var size = UInt32(data.count).littleEndian
     withUnsafeBytes(of: &size) { header.append(contentsOf: $0) }
     outputQueue.sync {
-        // Un tube fermé veut dire que l'app est partie.
+        // A closed pipe means the app is gone.
         do {
             try output.write(contentsOf: header)
             try output.write(contentsOf: data)
@@ -55,13 +55,13 @@ func fail(_ message: String) -> Never {
     exit(1)
 }
 
-// ------------------------------------------------------------ frameworks et appareil
+// ------------------------------------------------------------ frameworks and device
 
 guard dlopen("/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/CoreSimulator", RTLD_NOW) != nil else {
-    fail("CoreSimulator est introuvable : Xcode est-il installé ?")
+    fail("CoreSimulator not found: is Xcode installed?")
 }
 let simulatorKit = (developerDir as NSString).deletingLastPathComponent + "/SharedFrameworks/SimulatorKit.framework/Versions/A/SimulatorKit"
-guard dlopen(simulatorKit, RTLD_NOW) != nil else { fail("SimulatorKit est introuvable dans cet Xcode.") }
+guard dlopen(simulatorKit, RTLD_NOW) != nil else { fail("SimulatorKit not found in this Xcode.") }
 
 func call(_ target: AnyObject, _ name: String) -> AnyObject? {
     let selector = NSSelectorFromString(name)
@@ -77,8 +77,8 @@ func findDevice() -> AnyObject? {
     return devices.first { ($0.value(forKey: "UDID") as? NSUUID)?.uuidString == udid }
 }
 
-guard let device = findDevice() else { fail("Ce simulateur n'existe plus.") }
-// L'écran principal : le premier port qui a une image.
+guard let device = findDevice() else { fail("This simulator no longer exists.") }
+// The main screen: the first port that has an image.
 func findScreen() -> (descriptor: AnyObject, surface: IOSurfaceRef)? {
     guard let io = call(device, "io"), let ports = io.value(forKey: "ioPorts") as? [AnyObject] else { return nil }
     for port in ports {
@@ -88,25 +88,25 @@ func findScreen() -> (descriptor: AnyObject, surface: IOSurfaceRef)? {
     return nil
 }
 
-// Un appareil qui démarre n'a encore d'image sur aucun port : se brancher au hasard le laisserait noir.
+// A booting device has no image on any port yet: connecting at random would leave it black.
 var found = findScreen()
 let screenDeadline = Date().addingTimeInterval(180)
 while found == nil, Date() < screenDeadline {
     Thread.sleep(forTimeInterval: 0.25)
     found = findScreen()
 }
-guard let found else { fail("L'écran de ce simulateur est indisponible : est-il démarré ?") }
+guard let found else { fail("This simulator's screen is unavailable: is it booted?") }
 let screen = found.descriptor
 var surface: IOSurfaceRef? = found.surface
 
-// ------------------------------------------------------------ écran
+// ------------------------------------------------------------ screen
 
-let renderQueue = DispatchQueue(label: "rendu")
+let renderQueue = DispatchQueue(label: "render")
 var dirty = true
 var paused = false
 var lastSize = CGSize.zero
 let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-/// Le panneau n'a pas besoin de la résolution native : la moitié suffit et coûte quatre fois moins.
+/// The panel does not need the native resolution: half is enough and costs four times less.
 let renderScale = 0.5
 let jpegOptions = [kCGImageDestinationLossyCompressionQuality: 0.72] as CFDictionary
 
@@ -152,7 +152,7 @@ typealias RegisterFunction = @convention(c) (AnyObject, Selector, NSUUID, Dispat
 
 let registerSelector = NSSelectorFromString("registerScreenCallbacksWithUUID:callbackQueue:frameCallback:surfacesChangedCallback:propertiesChangedCallback:")
 guard screen.responds(to: registerSelector), let messageSend = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "objc_msgSend") else {
-    fail("Cet Xcode n'expose pas l'écran du simulateur comme attendu.")
+    fail("This Xcode does not expose the simulator screen as expected.")
 }
 let frameBlock: FrameBlock = { dirty = true }
 let surfacesBlock: SurfacesBlock = { unmasked, _ in
@@ -163,9 +163,9 @@ let propertiesBlock: PropertiesBlock = { _ in dirty = true }
 let callbackID = NSUUID()
 unsafeBitCast(messageSend, to: RegisterFunction.self)(screen, registerSelector, callbackID, renderQueue, frameBlock, surfacesBlock, propertiesBlock)
 
-// ------------------------------------------------------------ touches
+// ------------------------------------------------------------ input
 
-/// Un message Indigo tel que le construit SimulatorKit : pointeur à libérer après l'envoi.
+/// An Indigo message as SimulatorKit builds it: a pointer to free after sending.
 typealias MouseFunction = @convention(c) (UnsafePointer<CGPoint>, UnsafePointer<CGPoint>?, UInt32, UInt, CGSize, UInt32) -> UnsafeMutableRawPointer?
 typealias UsageFunction = @convention(c) (UInt32, UInt32, UInt32, UInt32) -> UnsafeMutableRawPointer?
 typealias SendFunction = @convention(c) (AnyObject, Selector, UnsafeMutableRawPointer, Bool, DispatchQueue?, (@convention(block) (AnyObject?) -> Void)?) -> Void
@@ -181,7 +181,7 @@ if let hidClass = NSClassFromString("SimulatorKit.SimDeviceLegacyHIDClient") as?
     hidClient = allocated?.perform(NSSelectorFromString("initWithDevice:error:"), with: device, with: nil)?.takeUnretainedValue()
 }
 
-let hidQueue = DispatchQueue(label: "touches")
+let hidQueue = DispatchQueue(label: "hid")
 let hidDone: @convention(block) (AnyObject?) -> Void = { error in
     if let error { report(["event": "input-error", "message": String(describing: error)]) }
 }
@@ -191,21 +191,21 @@ func sendHID(_ message: UnsafeMutableRawPointer?) {
     unsafeBitCast(messageSend, to: SendFunction.self)(hidClient, sendSelector, message, true, hidQueue, hidDone)
 }
 
-// Valeurs d'AppKit, stables : NSEventType.leftMouseDown, leftMouseUp, leftMouseDragged.
+// AppKit values, stable: NSEventType.leftMouseDown, leftMouseUp, leftMouseDragged.
 let touchTarget: UInt32 = 0x32
-/// Le bord où le geste a commencé : c'est lui qui déclenche les gestes du système (accueil, retour…).
+/// The edge where the gesture started: it triggers the system gestures (home, back…).
 var gestureEdge: UInt32 = 0
 func touch(_ phase: Substring, _ x: Double, _ y: Double) {
     guard let mouseMessage else { return }
     var point = CGPoint(x: x, y: y)
     let type: UInt = phase == "down" ? 1 : phase == "up" ? 2 : 6
-    // SimulatorKit refuse deux mouvements à moins de 16 ms : il rend alors un message nul, ignoré à l'envoi.
+    // SimulatorKit refuses two moves less than 16 ms apart: it then returns a null message, ignored when sending.
     sendHID(mouseMessage(&point, nil, touchTarget, type, CGSize(width: 1, height: 1), gestureEdge))
     if phase == "up" { gestureEdge = 0 }
 }
 
-// Pages HID : 7 clavier, 12 boutons (0x40 : accueil). Les fonctions dédiées de SimulatorKit
-// (`IndigoHIDMessageForButton`, `…KeyboardArbitrary`) n'ont aucun effet sur ces simulateurs.
+// HID pages: 7 keyboard, 12 buttons (0x40: home). SimulatorKit's dedicated functions
+// (`IndigoHIDMessageForButton`, `…KeyboardArbitrary`) have no effect on these simulators.
 func usage(page: UInt32, _ code: UInt32, down: Bool) {
     guard let usageMessage else { return }
     sendHID(usageMessage(touchTarget, page, code, down ? 1 : 2))
@@ -219,7 +219,7 @@ func goHome() {
 
 report(["event": "ready", "input": hidClient != nil && mouseMessage != nil])
 
-// ------------------------------------------------------------ commandes
+// ------------------------------------------------------------ commands
 
 let inputThread = Thread {
     while let line = readLine() {

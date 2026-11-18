@@ -1,5 +1,5 @@
-//! Mesure RAM/CPU du harness et de chaque session (processus CLI + ses enfants,
-//! dont les serveurs MCP). Appelé par l'UI uniquement quand la fenêtre est visible.
+//! Measures RAM/CPU of the harness and of each session (CLI process + its children,
+//! MCP servers included). Called by the UI only while the window is visible.
 
 use crate::events::{MetricsSnapshot, ProcStat};
 use std::collections::HashMap;

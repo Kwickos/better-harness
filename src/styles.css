@@ -1,12 +1,12 @@
 @import "./motion.css";
 
 /*
-  Better Harness : interface compacte.
-  13 px pour l'interface, 14 px pour la conversation, lignes de 28 px.
-  Une famille de gris, une encre, trois points de couleur fonctionnels.
-  Pas de séparateurs : l'espacement et les différences de fond structurent.
-  Mouvement : jetons de motion.css choisis selon l'usage ; transform et opacity seulement,
-  sauf les repliages (hauteur), et sans flou sur les grandes surfaces.
+  Better Harness: compact interface.
+  13 px for the interface, 14 px for the conversation, 28 px rows.
+  One family of grays, one ink, three functional color dots.
+  No separators: spacing and background differences give the structure.
+  Motion: motion.css tokens picked by usage; transform and opacity only,
+  except folds (height), and no blur on large surfaces.
 */
 
 @font-face {
@@ -24,14 +24,14 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+2020, U+20A0-20AB, U+2113, U+A720-A7FF;
 }
 @font-face {
-  font-family: "Geist Mono"; /* taste-skill-ignore : police réservée au code */
+  font-family: "Geist Mono"; /* taste-skill-ignore: font reserved for code */
   src: url("./fonts/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
   font-weight: 100 900;
   font-display: swap;
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: "Geist Mono"; /* taste-skill-ignore : police réservée au code */
+  font-family: "Geist Mono"; /* taste-skill-ignore: font reserved for code */
   src: url("./fonts/geist-mono-latin-ext-wght-normal.woff2") format("woff2-variations");
   font-weight: 100 900;
   font-display: swap;
@@ -61,8 +61,8 @@
   --live: #22a35a;
   --wait: #d4920f;
   --bad: #dc4a32;
-  --pop-shadow: 0 0 0 1px rgb(9 9 11 / 0.07), 0 12px 32px -8px rgb(9 9 11 / 0.18), 0 3px 8px -3px rgb(9 9 11 / 0.08); /* taste-skill-ignore : menus et dialogues */
-  --box-shadow: 0 1px 2px rgb(9 9 11 / 0.04), 0 4px 14px -6px rgb(9 9 11 / 0.08); /* taste-skill-ignore : composer */
+  --pop-shadow: 0 0 0 1px rgb(9 9 11 / 0.07), 0 12px 32px -8px rgb(9 9 11 / 0.18), 0 3px 8px -3px rgb(9 9 11 / 0.08); /* taste-skill-ignore: menus and dialogs */
+  --box-shadow: 0 1px 2px rgb(9 9 11 / 0.04), 0 4px 14px -6px rgb(9 9 11 / 0.08); /* taste-skill-ignore: composer */
   --column: 700px;
   --panel-w: 46%;
 }
@@ -117,27 +117,27 @@ svg { display: block; }
 .soft { color: var(--ink-3); }
 .spacer { flex: 1; }
 
-/* Survol : direct à l'entrée, plus doux à la sortie. */
+/* Hover: instant on the way in, softer on the way out. */
 button, .thread, .srv, .diff-row, summary { transition: background-color var(--duration-quick), color var(--duration-quick), opacity var(--duration-quick), transform var(--duration-quick) var(--ease-smooth-out); }
 button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transition-duration: var(--duration-micro), var(--duration-micro), var(--duration-micro), var(--duration-quick); }
-/* Appui : réponse tactile sur les boutons, pas sur les lignes de liste. */
+/* Press: tactile response on buttons, not on list rows. */
 .btn:active, .icon-btn:active, .send-btn:active:not(:disabled), .menu-btn:active, .side-link:active, .usage-btn:active, .chip:active, .group-more:active, .load-more:active, .s-pick:active, .snav:active { transform: scale(0.96); }
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after, ::backdrop { transition: none !important; animation: none !important; }
 }
 
-/* Fondu en bord de liste plutôt qu'une coupe nette (haut seulement une fois défilé). */
+/* Fade at the list edge rather than a hard cut (top only once scrolled). */
 @property --title-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
-.fade-y { --fade-top: 0px; --fade-bottom: 28px; mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%); } /* taste-skill-ignore : fondu demandé par l utilisateur */
+.fade-y { --fade-top: 0px; --fade-bottom: 28px; mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%); } /* taste-skill-ignore: fade requested by the user */
 .fade-y.is-scrolled { --fade-top: 20px; }
 .fade-y.at-end { --fade-bottom: 0px; }
 
 #app { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: 100dvh; }
 
-/* ---------------------------------------------------------------- boutons de base */
+/* ---------------------------------------------------------------- base buttons */
 
 .icon-btn, .send-btn { position: relative; }
-/* Zones cliquables agrandies sans chevaucher les voisins. Les lignes de 28 px gardent leur densité. */
+/* Larger hit areas without overlapping neighbors. 28 px rows keep their density. */
 .side-top .icon-btn::after, .send-btn::after, #s-close::after { content: ""; position: absolute; inset: -6px; }
 .thread-more::after, .srv-act::after, .diff-act::after, .group-head .icon-btn::after { content: ""; position: absolute; inset: -3px 0; }
 .icon-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--ink-2); }
@@ -155,15 +155,15 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .btn-soft:hover { background: var(--fill-2); }
 .btn-danger { color: var(--bad); }
 
-/* ---------------------------------------------------------------- barre latérale */
+/* ---------------------------------------------------------------- sidebar */
 
 #sidebar { display: flex; flex-direction: column; min-height: 0; background: var(--side); }
-/* 38 px : hauteur de la barre de titre macOS ; les feux tricolores occupent la gauche. */
+/* 38 px: height of the macOS title bar; the traffic lights take the left side. */
 .side-top { display: flex; align-items: center; justify-content: flex-end; flex: none; height: 38px; padding: 0 8px; }
 .side-search { display: flex; align-items: center; gap: 7px; height: 28px; margin: 2px 8px 6px; padding: 0 8px; border-radius: 7px; color: var(--ink-3); }
 .side-search svg { width: 14px; height: 14px; }
 .side-search:hover { background: var(--fill); }
-.side-search:focus-within { background: var(--bg); box-shadow: 0 0 0 1px var(--line-2); } /* taste-skill-ignore : anneau de focus */
+.side-search:focus-within { background: var(--bg); box-shadow: 0 0 0 1px var(--line-2); } /* taste-skill-ignore: focus ring */
 .side-search input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 13px; }
 .side-search input::placeholder { color: var(--ink-3); }
 .side-search input::-webkit-search-cancel-button { display: none; }
@@ -180,14 +180,14 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .group-head .icon-btn { width: 22px; height: 22px; opacity: 0; color: var(--ink-3); }
 .group-head .icon-btn svg { width: 13px; height: 13px; }
 .group-head:hover .icon-btn, .group-head .icon-btn:focus-visible { opacity: 1; }
-/* Repli en accordéon : même durée et même courbe dans les deux sens. */
+/* Accordion fold: same duration and curve both ways. */
 .fold { display: grid; grid-template-rows: 1fr; grid-template-columns: minmax(0, 1fr); transition: grid-template-rows var(--duration-fast) var(--ease-smooth-out), opacity var(--duration-fast) var(--ease-smooth-out); }
 .fold > * { min-height: 0; overflow: hidden; }
 .fold.is-closed { grid-template-rows: 0fr; opacity: 0; }
 .fold.no-anim { transition: none; }
-/* Réorganisation au pointeur. */
+/* Pointer reordering. */
 .is-reordering .group { position: relative; transition: transform var(--duration-fast) var(--ease-smooth-out); }
-.is-reordering .group.is-dragging { will-change: transform; z-index: 2; border-radius: 8px; background: var(--side); box-shadow: var(--pop-shadow); transition: none; } /* taste-skill-ignore : projet déplacé */
+.is-reordering .group.is-dragging { will-change: transform; z-index: 2; border-radius: 8px; background: var(--side); box-shadow: var(--pop-shadow); transition: none; } /* taste-skill-ignore: dragged project */
 .is-reordering .group.is-settling { z-index: 2; }
 .is-grabbing, .is-grabbing * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 #threads { position: relative; }
@@ -196,9 +196,9 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .thread { position: relative; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 7px; color: var(--ink-2); }
 .thread:hover { background: var(--fill); color: var(--ink); }
 .thread[aria-current="true"] { background: var(--fill-2); color: var(--ink); }
-/* Un titre trop long s'estompe au lieu d'être coupé ; au survol, le dégradé recule pour laisser la place au bouton. */
+/* A title that is too long fades out instead of being cut; on hover, the gradient moves back to make room for the button. */
 .thread-title { --title-end: 0px; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; transition: --title-end var(--duration-quick) var(--ease-smooth-out); }
-.thread-title.is-long, .thread:hover .thread-title, .thread:has(.thread-more[aria-expanded="true"]) .thread-title { mask-image: linear-gradient(to right, #000 calc(100% - var(--title-end) - 24px), transparent calc(100% - var(--title-end))); } /* taste-skill-ignore : fondu demandé par l utilisateur */
+.thread-title.is-long, .thread:hover .thread-title, .thread:has(.thread-more[aria-expanded="true"]) .thread-title { mask-image: linear-gradient(to right, #000 calc(100% - var(--title-end) - 24px), transparent calc(100% - var(--title-end))); } /* taste-skill-ignore: fade requested by the user */
 .thread:hover .thread-title, .thread:has(.thread-more[aria-expanded="true"]) .thread-title { --title-end: 26px; }
 .thread-more { position: absolute; top: 3px; right: 4px; display: none; width: 22px; height: 22px; color: var(--ink-3); }
 .thread:hover .thread-more, .thread-more[aria-expanded="true"] { display: grid; }
@@ -206,10 +206,10 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .thread-more:hover, .thread-more[aria-expanded="true"] { color: var(--ink); }
 .thread-state { display: grid; place-items: center; flex: none; color: var(--ink-3); transition: transform var(--duration-quick) var(--ease-smooth-out); }
 .thread-state.is-wait { color: var(--wait); }
-/* Sur l'en-tête d'un projet, seulement replié : déplié, la ligne de la conversation le montre déjà. */
+/* On a project header, only when collapsed: expanded, the conversation row already shows it. */
 .group-state { display: none; margin-right: 4px; }
 .group.is-collapsed .group-state { display: grid; }
-/* Spinner en `steps()` : 8 images/s, uniquement quand une conversation tourne. */
+/* Spinner in `steps()`: 8 frames/s, only while a conversation is running. */
 .thread-state.is-busy svg { animation: spin 1s steps(8) infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .group-more { height: 24px; margin: 1px 0 0; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-3); font-size: 12px; }
@@ -227,9 +227,9 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .update-btn { color: var(--ink); }
 .update-btn svg { color: var(--live); }
 
-/* ---------------------------------------------------------------- zone principale */
+/* ---------------------------------------------------------------- main area */
 
-/* Ligne : la conversation (barre + transcript + composer) et le panneau, chacun sur toute la hauteur. */
+/* Row: the conversation (bar + transcript + composer) and the panel, each full height. */
 #main { position: relative; display: flex; min-width: 0; min-height: 0; overflow: clip; background: var(--bg); }
 #bar { display: flex; align-items: center; gap: 8px; flex: none; height: 38px; padding: 0 8px 0 20px; }
 #crumb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); }
@@ -238,7 +238,7 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .bar-actions { display: flex; flex: none; align-items: center; gap: 2px; }
 
 #convo { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; }
-/* Colonne étroite (panneau ouvert sur une petite fenêtre) : le composer reste entier, envoi compris. */
+/* Narrow column (panel open in a small window): the composer stays whole, send button included. */
 @container (max-width: 360px) {
   .column { padding: 0 12px; }
   #mode-name, #mode-btn .chev, #effort-name, #folder-name { display: none; }
@@ -248,18 +248,18 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .column { width: 100%; max-width: var(--column); margin: 0 auto; padding: 0 28px; }
 
 .msg { margin: 0 0 18px; content-visibility: auto; contain-intrinsic-size: auto 60px; }
-/* Au montage : tailles réelles pour les derniers messages, et pas de barre de défilement qui clignote. */
+/* On mount: real sizes for the last messages, and no flashing scrollbar. */
 #transcript.is-mounting .msg:nth-last-child(-n + 30) { content-visibility: visible; }
 #transcript.is-mounting { scrollbar-width: none; }
 .msg:empty, .msg-hidden { display: none; }
 .msg-user { display: flex; justify-content: flex-end; margin-top: 26px; }
 .msg-user:first-child { margin-top: 0; }
 .bubble { max-width: 85%; padding: 7px 12px; border-radius: 14px; background: var(--fill); font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* Colonne bornée : `.msg` coupe ce qui dépasse (content-visibility), un contenu large ne doit pas l'élargir. */
+/* Bounded column: `.msg` clips overflow (content-visibility), wide content must not widen it. */
 .msg-assistant { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .msg-assistant.has-actions { margin-bottom: 0; }
 .msg-user { align-items: center; gap: 4px; }
-/* Actions d'un message : au survol seulement. */
+/* Message actions: on hover only. */
 .msg-actions { display: flex; flex: none; align-items: center; gap: 2px; opacity: 0; transition: opacity var(--duration-quick); }
 .msg:hover .msg-actions, .msg-actions:focus-within { opacity: 1; }
 .msg-assistant .msg-actions { height: 24px; margin: -6px 0 0 -5px; }
@@ -273,7 +273,7 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .load-more { display: block; margin: 0 auto 18px; height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-3); font-size: 12px; }
 .load-more:hover { background: var(--fill); color: var(--ink); }
 
-/* Markdown : messages terminés et streaming partagent exactement ces règles. */
+/* Markdown: finished messages and streaming share exactly these rules. */
 .md { min-width: 0; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
 .md > :first-child, .md-block > :first-child, .md-tail > :first-child { margin-top: 0; }
 .md > :last-child, .md-tail > :last-child { margin-bottom: 0; }
@@ -288,10 +288,10 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .md a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; }
 .md a:hover { text-decoration-color: var(--ink); }
 .md :not(pre) > code { padding: 0.1em 0.35em; border-radius: 4px; background: var(--fill); font-size: 0.86em; }
-/* Le texte long revient à la ligne : sans barre de défilement visible, il paraîtrait coupé. */
+/* Long text wraps: without a visible scrollbar, it would look cut off. */
 .md pre { margin: 0 0 0.85em; padding: 10px 12px; overflow-x: auto; border-radius: 8px; background: var(--side); font-size: 12.5px; line-height: 1.6; tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; }
 .md pre code { font-size: inherit; }
-/* Copier : barre collante sans hauteur, le bouton ne prend aucune place dans le bloc. */
+/* Copy: zero-height sticky bar, the button takes no room in the block. */
 .code-block { position: relative; min-width: 0; }
 .md .code-block { margin: 0 0 0.85em; }
 .md .code-block > pre { margin: 0; }
@@ -303,15 +303,15 @@ button:hover, .thread:hover, .srv:hover, .diff-row:hover, summary:hover { transi
 .code-block:hover .code-copy, .code-copy:focus-visible, .code-copy.is-done, .code-copy.is-failed { opacity: 1; }
 .code-copy.is-done, .icon-btn.sm.is-done { color: var(--add); }
 .code-copy.is-failed, .icon-btn.sm.is-failed { color: var(--bad); }
-.md blockquote { margin: 0 0 0.85em; padding: 0 0 0 12px; color: var(--ink-2); box-shadow: inset 2px 0 0 var(--line-2); } /* taste-skill-ignore : marque de citation */
+.md blockquote { margin: 0 0 0.85em; padding: 0 0 0 12px; color: var(--ink-2); box-shadow: inset 2px 0 0 var(--line-2); } /* taste-skill-ignore: quote mark */
 .md hr { height: 0; margin: 1.4em 0; border: 0; }
-.md img { max-width: 100%; border-radius: 6px; outline: 1px solid rgb(0 0 0 / 0.1); outline-offset: -1px; } /* taste-skill-ignore : contour d'image */
+.md img { max-width: 100%; border-radius: 6px; outline: 1px solid rgb(0 0 0 / 0.1); outline-offset: -1px; } /* taste-skill-ignore: image outline */
 @media (prefers-color-scheme: dark) { .md img { outline-color: rgb(255 255 255 / 0.1); } } /* taste-skill-ignore */
 .md table { display: block; margin: 0 0 0.85em; overflow-x: auto; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .md th, .md td { padding: 5px 16px 5px 0; text-align: left; vertical-align: top; }
 .md th { font-weight: 500; color: var(--ink-2); }
 
-/* Ligne d'activité : outils et réflexion d'un même passage, repliés. */
+/* Activity line: tools and thinking from one pass, collapsed. */
 details.activity > summary { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 24px; margin-left: -6px; padding: 0 6px; border-radius: 6px; list-style: none; color: var(--ink-3); }
 details.activity > summary::-webkit-details-marker, details.tool > summary::-webkit-details-marker { display: none; }
 details.activity > summary:hover { background: var(--fill); color: var(--ink-2); }
@@ -337,7 +337,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .tool-io.is-error { color: var(--bad); }
 .thinking-body { font-size: 13px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; }
 
-/* Fichiers montrés par Claude : images en aperçu, autres fichiers en carte d'une ligne. */
+/* Files shown by Claude: images as previews, other files as a one-line card. */
 .att { display: grid; gap: 6px; justify-items: start; min-width: 0; }
 .att:empty { display: none; }
 .att-images { display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%; }
@@ -346,8 +346,8 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .att-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .att-images.is-single .att-img img, .att-img.is-small img { object-fit: contain; }
 .att-img.is-small img { width: auto; height: auto; margin: auto; position: absolute; inset: 0; }
-/* Contour fin sur l'image, et léger voile au survol. */
-.att-img::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgb(9 9 11 / 0.08); transition: background-color var(--duration-quick); pointer-events: none; } /* taste-skill-ignore : contour d'image */
+/* Thin outline on the image, and a light veil on hover. */
+.att-img::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgb(9 9 11 / 0.08); transition: background-color var(--duration-quick); pointer-events: none; } /* taste-skill-ignore: image outline */
 .att-img:hover::after { background: rgb(9 9 11 / 0.06); transition-duration: var(--duration-micro); }
 .att-img:active { transform: scale(0.985); }
 .att-file { display: flex; align-items: center; max-width: 100%; height: 32px; border-radius: 8px; background: var(--fill); }
@@ -356,7 +356,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .att-note { flex: none; font-size: 12px; color: var(--ink-3); }
 .att-file:hover { background: var(--fill-2); }
-.att-file.is-missing { background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); } /* taste-skill-ignore : fichier absent */
+.att-file.is-missing { background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); } /* taste-skill-ignore: missing file */
 .att-file.is-missing .att-name { color: var(--ink-3); }
 .att-reveal { width: 26px; height: 26px; margin: 0 3px 0 -6px; border-radius: 6px; color: var(--ink-3); opacity: 0; }
 .att-file:hover .att-reveal, .att-reveal:focus-visible { opacity: 1; }
@@ -368,7 +368,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 }
 
 #stream { margin-bottom: 18px; }
-/* Indicateur de travail : trois points en `steps()`, ≈3 rafraîchissements par seconde seulement. */
+/* Working indicator: three dots in `steps()`, only ≈3 repaints per second. */
 #working { display: flex; align-items: center; height: 24px; color: var(--ink-3); }
 .dots::after { content: ""; display: inline-block; width: 1.4em; text-align: left; animation: dots 1.2s steps(4, end) infinite; }
 @keyframes dots {
@@ -378,9 +378,9 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
   75% { content: "..."; }
 }
 
-/* ---------------------------------------------------------------- changement de conversation */
+/* ---------------------------------------------------------------- conversation switch */
 
-/* L'ancien fil, le temps de son fondu : hors du flux, au-dessous du composer. */
+/* The old thread, while it fades: out of the flow, below the composer. */
 #convo { position: relative; }
 #dock { position: relative; z-index: 1; }
 .transcript-ghost { position: absolute; right: 0; left: 0; z-index: 0; overflow: hidden; pointer-events: none; }
@@ -399,7 +399,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 #limit { margin: 0 4px 8px; font-size: 12.5px; color: var(--ink-2); }
 #limit.is-error { color: var(--bad); }
 
-/* Demande de permission : une phrase et trois boutons ; le détail s'ouvre au clic. */
+/* Permission request: one sentence and three buttons; the detail opens on click. */
 .perm { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; margin-bottom: 8px; padding: 5px; border-radius: 12px; background: var(--fill); }
 .perm-main { display: flex; align-items: center; gap: 8px; min-width: 0; height: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); text-align: left; }
 .perm-main:hover:not(:disabled) { background: var(--fill-2); }
@@ -413,7 +413,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .perm-actions .btn { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12.5px; }
 .perm .btn-ghost:hover { background: var(--fill-2); }
 .perm-plan { max-height: 40vh; padding: 8px 10px; overflow: auto; border-radius: 4px; background: var(--bg); font-size: 13px; line-height: 1.55; }
-/* Question du modèle : les réponses se lisent et se choisissent d'un coup d'œil. */
+/* Question from the model: answers can be read and picked at a glance. */
 .perm.question { display: block; }
 .q-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
 .q-head { display: flex; align-items: baseline; gap: 8px; padding: 3px 8px 5px; }
@@ -441,19 +441,19 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
   .perm-actions { justify-content: flex-end; }
 }
 
-#composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 10px 8px 8px 12px; border-radius: 16px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line-2), var(--box-shadow); } /* taste-skill-ignore : contour du composer */
+#composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 10px 8px 8px 12px; border-radius: 16px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line-2), var(--box-shadow); } /* taste-skill-ignore: composer outline */
 #composer:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 26%, transparent), var(--box-shadow); } /* taste-skill-ignore */
 #input { display: block; width: 100%; min-height: 28px; max-height: 240px; margin: 0; padding: 0 4px 6px 2px; overflow-y: auto; border: 0; outline: 0; background: transparent; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; -webkit-user-select: text; user-select: text; }
 #input.is-empty::before { content: attr(data-placeholder); float: left; height: 0; color: var(--ink-3); pointer-events: none; }
-/* Mentions : une étiquette d'un cran sous le texte, qui se sélectionne d'un bloc. */
+/* Mentions: a label one step below the text, selected as a single block. */
 .mention { display: inline-flex; align-items: center; gap: 3px; margin: 0 1px; padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, var(--tint) 14%, transparent); color: var(--tint); font-size: 0.87em; line-height: 1.5; vertical-align: 1px; user-select: all; -webkit-user-select: all; }
 .mention.is-skill { --tint: var(--mention-skill); }
 .mention.is-folder, .mention.is-file { --tint: var(--mention-file); }
 .mention-icon { display: inline-grid; flex: none; }
 .bubble .mention { user-select: text; -webkit-user-select: text; }
 #mention-menu { position: absolute; right: 0; bottom: calc(100% + 8px); left: 0; z-index: 15; display: flex; align-items: flex-end; gap: 8px; transform-origin: left bottom; pointer-events: none; }
-#mention-list { flex: 1; min-width: 0; max-height: 240px; padding: 5px; overflow-y: auto; border-radius: 12px; background: var(--bg); box-shadow: var(--pop-shadow); pointer-events: auto; } /* taste-skill-ignore : menu flottant */
-#mention-detail { flex: none; width: 250px; padding: 9px 12px 10px; border-radius: 12px; background: var(--bg); box-shadow: var(--pop-shadow); font-size: 12px; line-height: 1.5; color: var(--ink-2); pointer-events: auto; } /* taste-skill-ignore : menu flottant */
+#mention-list { flex: 1; min-width: 0; max-height: 240px; padding: 5px; overflow-y: auto; border-radius: 12px; background: var(--bg); box-shadow: var(--pop-shadow); pointer-events: auto; } /* taste-skill-ignore: floating menu */
+#mention-detail { flex: none; width: 250px; padding: 9px 12px 10px; border-radius: 12px; background: var(--bg); box-shadow: var(--pop-shadow); font-size: 12px; line-height: 1.5; color: var(--ink-2); pointer-events: auto; } /* taste-skill-ignore: floating menu */
 #mention-detail b { display: block; margin-bottom: 2px; overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 #mention-detail p { display: -webkit-box; margin: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 6; line-clamp: 6; }
 .mention-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); text-align: left; font-size: 13px; }
@@ -488,12 +488,12 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .send-btn.is-stop svg { width: 12px; height: 12px; }
 .send-btn.is-stop:hover { background: color-mix(in srgb, var(--ink) 12%, var(--fill-2)); }
 
-/* ---------------------------------------------------------------- panneau latéral (navigateur, serveurs) */
+/* ---------------------------------------------------------------- side panel (browser, servers) */
 
 #panel { position: relative; display: flex; flex-direction: column; flex: none; width: var(--panel-w); min-width: min(340px, calc(100% - 180px)); max-width: max(min(340px, calc(100% - 180px)), calc(100% - 420px)); min-height: 0; background: var(--side); }
 #panel.is-closing { position: absolute; top: 0; right: 0; bottom: 0; z-index: 3; pointer-events: none; }
 #panel-resize { position: absolute; top: 0; bottom: 0; left: -3px; z-index: 2; width: 6px; cursor: col-resize; }
-/* Même hauteur que la barre de la conversation (38 px, zone de déplacement de la fenêtre). */
+/* Same height as the conversation bar (38 px, window drag area). */
 .panel-head { display: flex; align-items: center; gap: 8px; flex: none; height: 38px; padding: 0 8px; }
 .panel-name { flex: none; padding-left: 8px; font-weight: 500; }
 .tab-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
@@ -518,7 +518,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .sim-actions .icon-btn svg { width: 15px; height: 15px; }
 #sim-stage { display: grid; flex: 1; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; min-height: 0; padding: 0 16px 16px; overflow: hidden; }
 #sim-stage > * { grid-area: 1 / 1; }
-/* Sans largeur ni hauteur imposées, les deux maximums gardent les proportions de l'écran. */
+/* With no forced width or height, the two maximums keep the screen proportions. */
 #sim-screen { max-width: 100%; max-height: 100%; border-radius: var(--sim-radius, 0); outline: 1px solid rgb(0 0 0 / 0.1); outline-offset: -1px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; }
 #sim-screen:focus { outline: 1px solid rgb(0 0 0 / 0.1); } /* taste-skill-ignore */
 #sim-screen:focus-visible { outline: 2px solid var(--line-2); outline-offset: 2px; }
@@ -544,14 +544,14 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .diff-name.is-gone { color: var(--ink-3); text-decoration: line-through; }
 .diff-dir { flex: 1 1 0; min-width: 0; overflow: hidden; color: var(--ink-3); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .diff-row > .diff-count, .diff-row > .srv-meta { padding-right: 5px; }
-/* Au survol, les actions prennent la place des compteurs : la ligne ne change pas de largeur. */
+/* On hover, actions take the place of the counters: the row doesn't change width. */
 .diff-act { display: none; flex: none; width: 22px; height: 22px; color: var(--ink-3); }
 .diff-act svg { width: 14px; height: 14px; }
 .diff-act:hover { color: var(--ink); }
 .diff-row:hover .diff-act, .diff-row:focus-within .diff-act { display: grid; }
 .diff-row:hover > .diff-count, .diff-row:focus-within > .diff-count { display: none; }
 .diff-note { margin: 4px 8px 8px; font-size: 12px; color: var(--ink-3); }
-.diff { overflow-x: auto; margin: 2px 0 6px; padding: 4px 0; border-radius: 8px; background: var(--bg); font-family: var(--mono); font-size: 11.5px; line-height: 1.6; } /* taste-skill-ignore : code littéral */
+.diff { overflow-x: auto; margin: 2px 0 6px; padding: 4px 0; border-radius: 8px; background: var(--bg); font-family: var(--mono); font-size: 11.5px; line-height: 1.6; } /* taste-skill-ignore: literal code */
 .diff-lines { display: grid; width: max-content; min-width: 100%; }
 .d-line { display: grid; grid-template-columns: 4ch 2ch minmax(0, 1fr); padding-right: 10px; white-space: pre; }
 .diff.no-numbers .d-line { grid-template-columns: 2.5ch minmax(0, 1fr); padding-left: 2px; }
@@ -566,7 +566,7 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .d-hunk { padding: 6px 10px 3px; overflow: hidden; color: var(--ink-3); text-overflow: ellipsis; white-space: nowrap; }
 .tool-body .diff { max-height: 280px; overflow: auto; margin: 0 0 4px; background: var(--side); }
 .perm-detail .diff { max-height: 220px; overflow: auto; margin: 0; border-radius: 4px; }
-/* Mêmes lignes que la liste des conversations : un nom, l'essentiel à droite, l'action au survol. */
+/* Same rows as the conversation list: a name, the essentials on the right, the action on hover. */
 .srv-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; margin: 0; padding: 0; list-style: none; }
 .srv { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 3px 0 8px; border-radius: 7px; color: var(--ink-2); }
 .srv.is-on { color: var(--ink); }
@@ -581,8 +581,8 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .srv-act svg { width: 12px; height: 12px; }
 .srv:hover .srv-act, .srv-act:focus-visible { opacity: 1; }
 .srv-act:hover { color: var(--ink); }
-/* Un triangle centré géométriquement paraît décalé à gauche. */
-.srv-act[title="Démarrer"] svg { transform: translateX(0.5px); }
+/* A geometrically centered triangle looks shifted to the left. */
+.srv-act[data-action="start"] svg { transform: translateX(0.5px); }
 .srv .switch { width: 26px; height: 16px; margin-right: 3px; }
 .srv .switch::after { width: 12px; height: 12px; }
 .srv .switch:checked { background: var(--ink-2); }
@@ -591,9 +591,9 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .logs-head { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 12px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
 #logs { flex: 1; min-height: 0; margin: 0; padding: 4px 12px 10px; overflow: auto; color: var(--ink-2); font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* ---------------------------------------------------------------- menus flottants */
+/* ---------------------------------------------------------------- floating menus */
 
-.menu { position: fixed; z-index: 20; min-width: 232px; max-width: 340px; max-height: min(460px, 72vh); overflow-y: auto; padding: 5px; border-radius: 12px; background: var(--bg); box-shadow: var(--pop-shadow); } /* taste-skill-ignore : menu flottant */
+.menu { position: fixed; z-index: 20; min-width: 232px; max-width: 340px; max-height: min(460px, 72vh); overflow-y: auto; padding: 5px; border-radius: 12px; background: var(--bg); box-shadow: var(--pop-shadow); } /* taste-skill-ignore: floating menu */
 .menu-filter { display: block; width: 100%; height: 28px; margin-bottom: 4px; padding: 0 8px; border: 0; border-radius: 7px; outline: 0; background: var(--fill); color: var(--ink); font-size: 12.5px; }
 .menu-filter::placeholder { color: var(--ink-3); }
 .menu-filter::-webkit-search-cancel-button { display: none; }
@@ -611,12 +611,12 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .menu-item kbd { font: 500 11px var(--font); color: var(--ink-3); }
 .menu-item.no-icon { grid-template-columns: minmax(0, 1fr) auto; }
 .menu-item.is-danger b, .menu-item.is-danger .mi-icon { color: var(--bad); }
-/* Groupes de menu : un simple espace, sans filet. */
+/* Menu groups: a plain gap, no rule. */
 .menu-sep { height: 6px; }
 .menu-label { padding: 7px 8px 4px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
 .menu-seg { position: relative; display: grid; grid-auto-columns: auto; grid-auto-flow: column; gap: 2px; margin: 0 4px 4px; padding: 3px; border-radius: 9px; background: var(--fill); }
-/* Grille à part : le fond glissant est positionné, il n'occupe pas de colonne. */
-.seg-pill { position: absolute; top: 3px; left: 0; height: 26px; border-radius: 6px; background: var(--bg); box-shadow: 0 1px 2px rgb(9 9 11 / 0.08); transition: transform var(--duration-fast) var(--ease-smooth-out), width var(--duration-fast) var(--ease-smooth-out); } /* taste-skill-ignore : segment actif */
+/* Separate grid: the sliding background is positioned, it takes no column. */
+.seg-pill { position: absolute; top: 3px; left: 0; height: 26px; border-radius: 6px; background: var(--bg); box-shadow: 0 1px 2px rgb(9 9 11 / 0.08); transition: transform var(--duration-fast) var(--ease-smooth-out), width var(--duration-fast) var(--ease-smooth-out); } /* taste-skill-ignore: active segment */
 .seg-pill.no-anim { transition: none; }
 .menu-seg button { position: relative; height: 26px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font-size: 12px; white-space: nowrap; }
 .menu-seg button:hover { color: var(--ink); }
@@ -637,9 +637,9 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 .ctx-bar span:nth-child(n + 4) { background: color-mix(in srgb, var(--ink-2) 25%, var(--fill)); }
 .ctx-row { display: flex; justify-content: space-between; gap: 16px; padding: 3px 8px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
-/* ---------------------------------------------------------------- réglages */
+/* ---------------------------------------------------------------- settings */
 
-dialog { width: min(760px, calc(100vw - 48px)); height: min(540px, calc(100dvh - 64px)); padding: 0; overflow: hidden; border: 0; border-radius: 14px; background: var(--bg); color: var(--ink); box-shadow: var(--pop-shadow); } /* taste-skill-ignore : dialogue flottant */
+dialog { width: min(760px, calc(100vw - 48px)); height: min(540px, calc(100dvh - 64px)); padding: 0; overflow: hidden; border: 0; border-radius: 14px; background: var(--bg); color: var(--ink); box-shadow: var(--pop-shadow); } /* taste-skill-ignore: floating dialog */
 dialog::backdrop { background: rgb(9 9 11 / 0.24); animation: backdrop-in var(--duration-fast) var(--ease-smooth-out); }
 dialog[open] { animation: modal-in var(--duration-fast) var(--ease-smooth-out); }
 dialog.is-closing { animation: modal-out var(--duration-quick) var(--ease-smooth-out) both; }
@@ -648,7 +648,7 @@ dialog.is-closing::backdrop { animation: backdrop-out var(--duration-quick) var(
 @keyframes modal-out { to { opacity: 0; transform: scale(var(--scale-large)); } }
 @keyframes backdrop-in { from { opacity: 0; } }
 @keyframes backdrop-out { to { opacity: 0; } }
-/* Visionneuse : toute la fenêtre, toujours sombre, l'image ajustée sans être agrandie. */
+/* Viewer: the whole window, always dark, the image fitted without being enlarged. */
 dialog.viewer { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; border-radius: 0; background: transparent; color: #ededef; box-shadow: none; }
 dialog.viewer::backdrop { background: rgb(9 9 11 / 0.88); }
 .viewer-bar { position: absolute; top: 0; right: 0; left: 0; z-index: 1; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 10px 0 84px; }
@@ -692,7 +692,7 @@ dialog.viewer::backdrop { background: rgb(9 9 11 / 0.88); }
 .s-pick:hover { background: var(--fill); }
 .s-pick .chev svg { width: 10px; height: 10px; }
 .switch { appearance: none; position: relative; width: 32px; height: 19px; flex: none; margin: 0; border-radius: 10px; background: var(--fill-2); transition: background-color var(--duration-quick) var(--ease-smooth-out); }
-.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); transition: transform var(--duration-quick) var(--ease-smooth-out); } /* taste-skill-ignore : curseur d'interrupteur */
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); transition: transform var(--duration-quick) var(--ease-smooth-out); } /* taste-skill-ignore: switch knob */
 .switch:checked { background: var(--ink); }
 .switch:checked::after { transform: translateX(13px); }
 @media (prefers-color-scheme: dark) { .switch:checked::after { background: var(--on-ink); } }
@@ -713,16 +713,16 @@ dialog.viewer::backdrop { background: rgb(9 9 11 / 0.88); }
 #toast.is-leaving { animation: toast-out var(--duration-medium) var(--ease-smooth-out) both; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, var(--distance-base)); } }
 @keyframes toast-out { to { opacity: 0; transform: translate(-50%, var(--distance-micro)); } }
-#toast { animation: toast-in var(--duration-fast) var(--ease-smooth-out); position: fixed; left: 50%; bottom: 90px; z-index: 30; max-width: min(480px, 80vw); padding: 7px 12px; border-radius: 9px; transform: translateX(-50%); background: var(--ink); color: var(--on-ink); font-size: 12.5px; white-space: pre-wrap; box-shadow: var(--pop-shadow); } /* taste-skill-ignore : toast flottant */
+#toast { animation: toast-in var(--duration-fast) var(--ease-smooth-out); position: fixed; left: 50%; bottom: 90px; z-index: 30; max-width: min(480px, 80vw); padding: 7px 12px; border-radius: 9px; transform: translateX(-50%); background: var(--ink); color: var(--on-ink); font-size: 12.5px; white-space: pre-wrap; box-shadow: var(--pop-shadow); } /* taste-skill-ignore: floating toast */
 
-/* ---------------------------------------------------------------- monde des agents (src/world.ts) */
+/* ---------------------------------------------------------------- agents world (src/world.ts) */
 
 #world { display: none; }
 :root[data-world="on"] #world { display: block; margin-bottom: 8px; }
 .world-frame { position: relative; }
 #world canvas { display: block; width: 100%; aspect-ratio: 732 / 88; border-radius: 12px; image-rendering: pixelated; box-shadow: 0 0 0 1px var(--line-2); }
 .world-bubbles { position: absolute; inset: 0; pointer-events: none; }
-.world-bubble { position: absolute; max-width: 240px; padding: 3px 8px; overflow: hidden; transform: translate(-50%, -100%); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 11.5px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; box-shadow: var(--pop-shadow); } /* taste-skill-ignore : bulle flottante */
+.world-bubble { position: absolute; max-width: 240px; padding: 3px 8px; overflow: hidden; transform: translate(-50%, -100%); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 11.5px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; box-shadow: var(--pop-shadow); } /* taste-skill-ignore: floating bubble */
 .world-bubble.is-quip { background: var(--ink); color: var(--on-ink); font-weight: 500; }
 .world-bubble.is-start { transform: translate(-18px, -100%); }
 .world-bubble.is-end { transform: translate(calc(-100% + 18px), -100%); }

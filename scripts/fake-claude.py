@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Faux binaire `claude` qui parle le protocole stream-json, pour tester le
-harness sans consommer de quota. Il reproduit la séquence observée sur le vrai
-CLI 2.1.319 : réponse à `initialize`, system:init, deltas de texte, appel d'outil
-avec demande de permission (can_use_tool), tool_result puis result.
+"""Fake `claude` binary that speaks the stream-json protocol, to test the
+harness without using quota. It reproduces the sequence observed on the real
+CLI 2.1.319: response to `initialize`, system:init, text deltas, tool call
+with a permission request (can_use_tool), tool_result then result.
 
-Usage : dans Réglages, chemin du binaire claude = <repo>/scripts/fake-claude.py
+Usage: in Settings, claude binary path = <repo>/scripts/fake-claude.py
 """
 import json
 import sys
@@ -58,10 +58,10 @@ while True:
     prompt = msg["message"]["content"]
     mid = f"msg_{uuid.uuid4().hex[:10]}"
     send({"type": "system", "subtype": "status", "status": "requesting"})
-    if "lon" in prompt.lower():  # « long » (tolérant aux saisies tronquées)
-        # Mode mesure : ~20 s de streaming continu (≈80 deltas/s), sans outil.
-        para = ("Le harness coalesce les deltas côté Rust et ne rend que la session visible. "
-                "Ce paragraphe sert à mesurer le coût CPU du rendu pendant une longue réponse. ")
+    if "lon" in prompt.lower():  # "long" (tolerates truncated input)
+        # Measurement mode: ~20 s of continuous streaming (≈80 deltas/s), no tool.
+        para = ("The harness coalesces deltas on the Rust side and only renders the visible session. "
+                "This paragraph measures the CPU cost of rendering during a long reply. ")
         text = "".join(f"## Section {i}\n\n{para * 3}\n\n- point A\n- point B\n\n" for i in range(1, 25))
         stream_text(text, delay=0.012)
         send({"type": "assistant", "parent_tool_use_id": None,
@@ -70,12 +70,12 @@ while True:
               "duration_ms": int((time.time() - t0) * 1000), "total_cost_usd": 0, "session_id": session_id,
               "result": "", "usage": {"input_tokens": 100, "output_tokens": len(text) // 4}})
         continue
-    intro = f"Je regarde ça (tour {turn}). Tu as écrit : « {prompt[:80]} ».\n\nJe vais lister le dossier."
+    intro = f"Looking into it (turn {turn}). You wrote: \"{prompt[:80]}\".\n\nI'll list the folder."
     stream_text(intro)
     send({"type": "assistant", "parent_tool_use_id": None,
           "message": {"id": mid, "content": [{"type": "text", "text": intro}]}})
     tool_id = f"toolu_{uuid.uuid4().hex[:10]}"
-    tool_input = {"command": "ls -la", "description": "Lister le dossier"}
+    tool_input = {"command": "ls -la", "description": "List the folder"}
     send({"type": "assistant", "parent_tool_use_id": None,
           "message": {"id": mid, "content": [{"type": "tool_use", "id": tool_id, "name": "Bash", "input": tool_input}]}})
     send({"type": "control_request", "request_id": f"perm-{turn}",
@@ -91,12 +91,12 @@ while True:
         if r.get("type") == "control_response":
             decision = r["response"]["response"]
     allowed = decision.get("behavior") == "allow"
-    out = "total 8\ndrwxr-xr-x  3 user staff  96 .\n-rw-r--r--  1 user staff 120 README.md" if allowed else decision.get("message", "refusé")
+    out = "total 8\ndrwxr-xr-x  3 user staff  96 .\n-rw-r--r--  1 user staff 120 README.md" if allowed else decision.get("message", "denied")
     send({"type": "user", "parent_tool_use_id": None,
           "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_id,
                                                    "content": out, "is_error": not allowed}]}})
-    final = ("Voici le contenu :\n\n```\n" + out + "\n```\n\n| Fichier | Taille |\n|---|---|\n| README.md | 120 o |\n\n"
-             "**Terminé.**") if allowed else "D'accord, je n'exécute pas la commande."
+    final = ("Here are the contents:\n\n```\n" + out + "\n```\n\n| File | Size |\n|---|---|\n| README.md | 120 B |\n\n"
+             "**Done.**") if allowed else "OK, I won't run the command."
     mid2 = f"msg_{uuid.uuid4().hex[:10]}"
     stream_text(final)
     send({"type": "assistant", "parent_tool_use_id": None,

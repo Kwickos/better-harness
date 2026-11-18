@@ -1,11 +1,11 @@
-//! Ce que le composer propose après « @ » : fichiers et dossiers du projet,
-//! ou contenu d'un chemin absolu quand on en tape un.
-//! Le parcours est borné : on s'arrête dès qu'il y a de quoi remplir le menu.
+//! What the composer suggests after "@": the project's files and folders,
+//! or the content of an absolute path when one is typed.
+//! The walk is bounded: it stops as soon as there is enough to fill the menu.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
-/// Dossiers jamais proposés : du bruit, et parfois des dizaines de milliers d'entrées.
+/// Folders never suggested: noise, and sometimes tens of thousands of entries.
 const SKIP: [&str; 12] = [
     "node_modules",
     ".git",
@@ -22,15 +22,15 @@ const SKIP: [&str; 12] = [
 ];
 const MAX_RESULTS: usize = 40;
 const MAX_DEPTH: usize = 6;
-/// Plafond d'entrées lues, pour un dossier immense sans résultat.
+/// Cap on entries read, for a huge folder with no result.
 const MAX_VISITED: usize = 20_000;
 
 fn is_dir(entry: &std::fs::DirEntry) -> bool {
-    // Un lien symbolique n'est pas suivi : il pourrait boucler ou sortir du projet.
+    // A symbolic link is not followed: it could loop or leave the project.
     entry.file_type().map(|t| t.is_dir()).unwrap_or(false)
 }
 
-/// Chemins relatifs à `root` qui contiennent `query`, les plus courts d'abord. Un dossier finit par `/`.
+/// Paths relative to `root` that contain `query`, shortest first. A folder ends with `/`.
 fn search_project(root: &Path, query: &str) -> Vec<String> {
     let needle = query.to_lowercase();
     let mut results = Vec::new();
@@ -63,7 +63,7 @@ fn search_project(root: &Path, query: &str) -> Vec<String> {
     results
 }
 
-/// Contenu d'un dossier désigné par un chemin absolu : `/a/b/` liste `b`, `/a/b/c` filtre sur `c`.
+/// Content of a folder given by an absolute path: `/a/b/` lists `b`, `/a/b/c` filters on `c`.
 fn browse(typed: &str, home: &Path) -> Vec<String> {
     let expanded: PathBuf = match typed.strip_prefix("~/") {
         Some(rest) => home.join(rest),
@@ -90,7 +90,7 @@ fn browse(typed: &str, home: &Path) -> Vec<String> {
             Some((dir_entry, if dir_entry { format!("{full}/") } else { full }))
         })
         .collect();
-    // Les dossiers d'abord : on navigue vers eux.
+    // Folders first: they are navigated into.
     found.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase())));
     found.truncate(MAX_RESULTS);
     found.into_iter().map(|(_, p)| p).collect()
@@ -114,35 +114,35 @@ mod tests {
 
     fn tree() -> PathBuf {
         let root = std::env::temp_dir().join(format!("bh-mentions-{}", uuid::Uuid::new_v4()));
-        for dir in ["src/ui", "node_modules/lib", ".git/objects", "dossier avec espace"] {
+        for dir in ["src/ui", "node_modules/lib", ".git/objects", "folder with space"] {
             std::fs::create_dir_all(root.join(dir)).unwrap();
         }
-        for file in ["src/main.ts", "src/ui/menu.ts", "node_modules/lib/index.js", ".git/objects/x", ".env", "README.md", "dossier avec espace/note.md"] {
+        for file in ["src/main.ts", "src/ui/menu.ts", "node_modules/lib/index.js", ".git/objects/x", ".env", "README.md", "folder with space/note.md"] {
             std::fs::write(root.join(file), "").unwrap();
         }
         root
     }
 
     #[test]
-    fn recherche_dans_le_projet() {
+    fn searches_the_project() {
         let root = tree();
         let all = search_project(&root, "");
         assert!(all.contains(&"src/".to_string()), "{all:?}");
         assert!(all.contains(&"src/ui/menu.ts".to_string()), "{all:?}");
-        assert!(all.contains(&"dossier avec espace/note.md".to_string()), "{all:?}");
-        // Le bruit et les fichiers cachés restent dehors.
+        assert!(all.contains(&"folder with space/note.md".to_string()), "{all:?}");
+        // Noise and hidden files stay out.
         assert!(!all.iter().any(|p| p.contains("node_modules") || p.contains(".git") || p.contains(".env")), "{all:?}");
-        // Les plus courts d'abord.
+        // Shortest first.
         assert!(all.windows(2).all(|w| w[0].chars().count() <= w[1].chars().count()), "{all:?}");
 
         assert_eq!(search_project(&root, "MENU"), ["src/ui/menu.ts"]);
         assert_eq!(search_project(&root, "src/ui/"), ["src/ui/", "src/ui/menu.ts"]);
-        assert!(search_project(&root, "introuvable").is_empty());
+        assert!(search_project(&root, "missing").is_empty());
         let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
-    fn resultats_bornes() {
+    fn bounded_results() {
         let root = std::env::temp_dir().join(format!("bh-mentions-many-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         for i in 0..120 {
@@ -153,17 +153,17 @@ mod tests {
     }
 
     #[test]
-    fn chemin_absolu() {
+    fn absolute_path() {
         let root = tree();
         let base = root.to_string_lossy().into_owned();
         let listed = browse(&format!("{base}/"), &root);
-        assert_eq!(listed.first().map(String::as_str), Some(format!("{base}/dossier avec espace/").as_str()), "{listed:?}");
+        assert_eq!(listed.first().map(String::as_str), Some(format!("{base}/folder with space/").as_str()), "{listed:?}");
         assert!(listed.contains(&format!("{base}/README.md")), "{listed:?}");
         assert!(!listed.iter().any(|p| p.ends_with(".env")), "{listed:?}");
         assert_eq!(browse(&format!("{base}/sr"), &root), [format!("{base}/src/")]);
         assert_eq!(browse(&format!("{base}/.en"), &root), [format!("{base}/.env")]);
         assert_eq!(browse("~/sr", &root), [format!("{base}/src/")]);
-        assert!(browse("/chemin/qui/n/existe/pas/", &root).is_empty());
+        assert!(browse("/path/that/does/not/exist/", &root).is_empty());
         let _ = std::fs::remove_dir_all(root);
     }
 }

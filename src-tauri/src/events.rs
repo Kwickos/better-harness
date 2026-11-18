@@ -1,5 +1,5 @@
-//! Événements envoyés à l'UI. Ce sont des projections compactes des messages
-//! stream-json du CLI : l'UI ne reçoit jamais le JSON brut (parfois énorme).
+//! Events sent to the UI. They are compact projections of the CLI's stream-json
+//! messages: the UI never receives the raw (sometimes huge) JSON.
 
 use serde::Serialize;
 
@@ -53,7 +53,7 @@ pub struct MetricsSnapshot {
     pub total_rss_mb: f64,
 }
 
-/// Un artefact publié : son adresse sur claude.ai et, s'il vient d'un fichier, le fichier local.
+/// A published artifact: its address on claude.ai and, if it comes from a file, the local file.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtifactRef {
@@ -77,8 +77,8 @@ pub enum UiEvent {
         tools: usize,
         mcp: Vec<McpStatus>,
     },
-    /// Texte en cours de génération (coalescé côté Rust). `replace` = remplacer
-    /// tout le tampon affiché (après un changement de focus).
+    /// Text being generated (coalesced on the Rust side). `replace` = replace
+    /// the whole displayed buffer (after a focus change).
     Delta {
         sid: String,
         text: String,
@@ -98,7 +98,7 @@ pub enum UiEvent {
         is_error: bool,
         text: String,
         truncated: bool,
-        /// Présent quand le résultat structuré désigne un artefact (outil `Artifact`).
+        /// Present when the structured result points to an artifact (`Artifact` tool).
         artifact: Option<ArtifactRef>,
     },
     User {
@@ -127,7 +127,7 @@ pub enum UiEvent {
         status: String,
         resets_at: Option<i64>,
         window: Option<String>,
-        /// Fenêtres de limite du compte (`unifiedWindows`) : part utilisée, de 0 à 1, et réinitialisation.
+        /// The account's limit windows (`unifiedWindows`): used share, from 0 to 1, and reset.
         windows: Option<serde_json::Value>,
     },
     Result {
@@ -146,7 +146,7 @@ pub enum UiEvent {
         level: String,
         text: String,
     },
-    /// Modèles disponibles (réponse à `initialize`), avec leurs niveaux d'effort.
+    /// Available models (answer to `initialize`), with their effort levels.
     Capabilities {
         sid: String,
         models: serde_json::Value,
@@ -163,10 +163,10 @@ pub enum UiEvent {
         url: String,
         loading: bool,
     },
-    /// La page d'un artefact a fini de charger : sa vue peut venir à l'écran.
+    /// An artifact's page has finished loading: its view can come on screen.
     ArtifactReady {},
-    /// Le pont du simulateur : `ready`, `no-input` (écran sans touches), `error`, `ended`,
-    /// et `agent` quand Claude commence à agir sur cet appareil.
+    /// The simulator bridge: `ready`, `no-input` (screen without touch input), `error`, `ended`,
+    /// and `agent` when Claude starts acting on this device.
     Simulator {
         udid: String,
         state: String,

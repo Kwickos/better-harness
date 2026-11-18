@@ -1,6 +1,7 @@
-// Menus flottants : icône, libellé, description, coche à droite, raccourci ;
-// navigation au clavier (↑ ↓ Entrée Échap), fermeture au clic extérieur.
+// Floating menus: icon, label, description, check mark on the right, shortcut;
+// keyboard navigation (↑ ↓ Enter Esc), closes on an outside click.
 import { icon, type IconName } from "./icons";
+import { t } from "./i18n";
 import { DUR, SCALE, enter, leave } from "./motion";
 import { el } from "./transcript";
 
@@ -33,7 +34,7 @@ export function closeMenu() {
 
 type MenuOpts = { place?: "above" | "below"; align?: "start" | "end"; minWidth?: number };
 
-/** Une ligne de menu : peut aussi servir dans un contenu sur mesure (liste filtrable). */
+/** One menu row: can also be used inside custom content (filterable list). */
 export function menuItem(e: MenuItem, hasIcons = true): HTMLElement {
   const b = el("button", `menu-item${hasIcons ? "" : " no-icon"}${e.danger ? " is-danger" : ""}`);
   b.type = "button";
@@ -65,7 +66,7 @@ export function showMenu(anchor: HTMLElement, entries: MenuEntry[], opts: MenuOp
   if (anchorEl === anchor) return closeMenu();
   closeMenu();
   const place = opts.place ?? "below";
-  // Avant toute mesure : une ancre visible seulement pendant que son menu est ouvert doit l'être.
+  // Before any measurement: an anchor that is only visible while its menu is open must be visible now.
   anchor.setAttribute("aria-expanded", "true");
   const m = el("div", "menu");
   m.style.transformOrigin = `${opts.align === "end" ? "right" : "left"} ${place === "above" ? "bottom" : "top"}`;
@@ -79,7 +80,7 @@ export function showMenu(anchor: HTMLElement, entries: MenuEntry[], opts: MenuOp
     else if ("custom" in e) m.append(e.custom);
     else m.append(menuItem(e, hasIcons));
   }
-  // Un <dialog> modal est dans la « top layer » : le menu doit y être attaché pour passer devant.
+  // A modal <dialog> sits in the "top layer": the menu must be attached inside it to show on top.
   (anchor.closest("dialog") ?? document.body).append(m);
   const r = anchor.getBoundingClientRect();
   const w = m.offsetWidth;
@@ -112,15 +113,15 @@ document.addEventListener("keydown", (e) => {
   }
 }, true);
 
-/** Confirmation d'une action qui ne se rattrape pas : « Annuler » a le focus, par sécurité. */
+/** Confirms an action that cannot be undone: "Cancel" has focus, to be safe. */
 export function confirmMenu(anchor: HTMLElement, title: string, note: string, action: string, run: () => void, opts: MenuOpts = {}) {
-  showMenu(anchor, [{ heading: title }, { note }, { label: "Annuler", run: () => {} }, { label: action, danger: true, run }], { minWidth: 260, ...opts });
+  showMenu(anchor, [{ heading: title }, { note }, { label: t("Cancel"), run: () => {} }, { label: action, danger: true, run }], { minWidth: 260, ...opts });
 }
 
-/** Rangée segmentée (ex. niveaux d'effort) à glisser dans un menu. */
+/** Segmented row (e.g. effort levels) to put in a menu. */
 export function segmented<T extends string>(options: { id: T; label: string }[], value: T, onPick: (v: T) => void): HTMLElement {
   const row = el("div", "menu-seg");
-  // Un seul fond, qui glisse d'une option à l'autre.
+  // A single background that slides from one option to the next.
   const pill = el("span", "seg-pill no-anim");
   row.append(pill);
   const place = (b: HTMLElement | undefined) => {
@@ -141,7 +142,7 @@ export function segmented<T extends string>(options: { id: T; label: string }[],
     });
     row.append(b);
   }
-  // La rangée n'est mesurable qu'une fois dans le menu : sans transition à cette première pose.
+  // The row can only be measured once it is in the menu: no transition for this first placement.
   queueMicrotask(() => {
     place(row.querySelector<HTMLElement>('button[aria-pressed="true"]') ?? undefined);
     requestAnimationFrame(() => pill.classList.remove("no-anim"));

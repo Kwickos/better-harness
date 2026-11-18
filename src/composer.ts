@@ -1,7 +1,8 @@
-// Champ de saisie : `contenteditable` plutôt que `textarea`, pour qu'une mention soit un vrai élément.
-// Elles sont `contenteditable="false"` : les flèches les franchissent d'un coup et la suppression
-// les retire entières, sans code clavier dédié.
+// Input field: `contenteditable` rather than `textarea`, so a mention is a real element.
+// Mentions are `contenteditable="false"`: arrow keys jump over them in one go and deleting
+// removes them whole, with no dedicated keyboard code.
 import type { Api } from "./api";
+import { t } from "./i18n";
 import { DUR, SCALE, enter, leave } from "./motion";
 import { appendWithMentions, buildMention, fileValue, kindIcon, kindOf, setKnownCommands, type CliCommand } from "./mentions";
 import { el } from "./transcript";
@@ -10,9 +11,9 @@ type Trigger = "/" | "@";
 interface Item {
   value: string;
   label: string;
-  /** Précision sur la ligne : d'où vient ce dossier. */
+  /** Detail on the row: where this folder comes from. */
   hint?: string;
-  /** Description affichée dans la bulle à côté de la ligne sélectionnée. */
+  /** Description shown in the bubble next to the selected row. */
   detail?: string | null;
 }
 
@@ -40,7 +41,7 @@ function readStored(): CliCommand[] {
   }
 }
 
-/** Les noms qui commencent par la saisie d'abord, puis ceux où elle commence un mot, puis le reste. */
+/** Names starting with the query first, then those where it starts a word, then the rest. */
 function rank(name: string, needle: string): number {
   const n = name.toLowerCase();
   if (n.startsWith(needle)) return 0;
@@ -67,9 +68,9 @@ export function initComposer(d: Deps) {
   let filesTimer = 0;
   let filesAsked = 0;
 
-  // ------------------------------------------------------------ texte
+  // ------------------------------------------------------------ text
 
-  /** Le texte du message : une mention rend sa valeur, pas son libellé. */
+  /** The message text: a mention yields its value, not its label. */
   function text(): string {
     let out = "";
     const walk = (node: Node) => {
@@ -101,7 +102,7 @@ export function initComposer(d: Deps) {
     }
   }
 
-  /** Remet un message dans le champ, ses mentions redevenues des pastilles, le curseur à la fin. */
+  /** Puts a message back in the field, its mentions turned back into chips, the caret at the end. */
   function setText(value: string) {
     input.replaceChildren();
     appendWithMentions(input, value);
@@ -119,7 +120,7 @@ export function initComposer(d: Deps) {
     changed();
   }
 
-  // ------------------------------------------------------------ jeton en cours de frappe
+  // ------------------------------------------------------------ token being typed
 
   function typedToken() {
     const sel = window.getSelection();
@@ -136,7 +137,7 @@ export function initComposer(d: Deps) {
     const token = typedToken();
     const nextTrigger = token?.trigger ?? null;
     const nextQuery = token?.query ?? "";
-    // Tourne à chaque frappe, flèches comprises : la sélection ne revient en tête que si le jeton change.
+    // Runs on every keystroke, arrows included: the selection only goes back to the top if the token changes.
     if (nextTrigger === trigger && nextQuery === query) return;
     trigger = nextTrigger;
     query = nextQuery;
@@ -144,13 +145,13 @@ export function initComposer(d: Deps) {
     refreshItems();
   }
 
-  // ------------------------------------------------------------ propositions
+  // ------------------------------------------------------------ suggestions
 
   function commandItems(): Item[] {
     const source = commands.get(d.cwd()) ?? lastCommands;
     const needle = query.toLowerCase();
     return source
-      // Les noms en « __ » sont internes au CLI : ils ne se lancent pas à la main.
+      // Names starting with "__" are internal to the CLI: they aren't run by hand.
       .filter((c) => !c.name.startsWith("__"))
       .map((c) => ({ c, r: rank(c.name, needle) }))
       .filter((x) => x.r >= 0)
@@ -172,7 +173,7 @@ export function initComposer(d: Deps) {
         try {
           localStorage.setItem(STORE, JSON.stringify(found));
         } catch {
-          // Sans stockage, la liste se relira au prochain lancement.
+          // Without storage, the list is read again on next launch.
         }
       })
       .catch(() => undefined)
@@ -185,7 +186,7 @@ export function initComposer(d: Deps) {
       });
   }
 
-  /** Les autres projets connus, pour mentionner un dossier hors de celui-ci. */
+  /** Other known projects, to mention a folder outside this one. */
   function projectItems(needle: string, taken: Set<string>): Item[] {
     const n = needle.toLowerCase();
     return d
@@ -249,7 +250,7 @@ export function initComposer(d: Deps) {
     if (open) {
       list.replaceChildren(
         ...(waiting
-          ? [el("div", "menu-note", "Lecture des skills…")]
+          ? [el("div", "menu-note", t("Loading skills…"))]
           : items.map((item, i) => {
               const row = el("button", "mention-item");
               row.type = "button";
@@ -263,7 +264,7 @@ export function initComposer(d: Deps) {
               }
               row.append(el("span", "mention-label", item.label));
               if (item.hint) row.append(el("span", "mention-hint", item.hint));
-              // Au `mousedown` : le champ garde le focus et le curseur.
+              // On `mousedown`: the field keeps focus and the caret.
               row.addEventListener("mousedown", (e) => {
                 e.preventDefault();
                 accept(item);
@@ -323,7 +324,7 @@ export function initComposer(d: Deps) {
     changed();
   }
 
-  // ------------------------------------------------------------ événements
+  // ------------------------------------------------------------ events
 
   input.addEventListener("input", () => {
     changed();
@@ -353,7 +354,7 @@ export function initComposer(d: Deps) {
       }
     }
     if (shown && e.key === "Escape") {
-      // Sinon Échap interromprait aussi Claude : le menu passe d'abord.
+      // Otherwise Esc would also interrupt Claude: the menu goes first.
       e.preventDefault();
       e.stopPropagation();
       close();
@@ -370,7 +371,7 @@ export function initComposer(d: Deps) {
   return {
     text,
     setText,
-    /** Ajoute un fichier en fin de message, comme une mention tapée. */
+    /** Adds a file at the end of the message, like a typed mention. */
     attach(path: string) {
       const before = text();
       setText(`${before}${before && !/\s$/.test(before) ? " " : ""}${fileValue(path)} `);

@@ -1,9 +1,10 @@
-// Monde des agents : chaque Claude de la conversation (le principal et ses sous-agents) est une
-// créature qui va au poste de ce qu'elle fait et le dit dans une bulle. Décor : src/assets/world-*.png
-// (732 × 88 pixels) ; créatures : src/assets/critters/*.png, tirées du Free Pets Pack de Frakassets
-// (CC BY 4.0, https://frakassets.itch.io/free-pets-pack). L'animation ne tourne que si le monde est
-// affiché et la fenêtre visible.
+// Agent world: each Claude in the conversation (the main one and its subagents) is a
+// creature that walks to the station of what it is doing and says it in a bubble. Scenery: src/assets/world-*.png
+// (732 × 88 pixels); creatures: src/assets/critters/*.png, from the Free Pets Pack by Frakassets
+// (CC BY 4.0, https://frakassets.itch.io/free-pets-pack). The animation only runs while the world is
+// shown and the window visible.
 import type { Block, UiEvent } from "./api";
+import { t, tp } from "./i18n";
 import nightUrl from "./assets/world-night.png";
 import dayUrl from "./assets/world-day.png";
 import foxSheetUrl from "./assets/critters/fox.png";
@@ -19,25 +20,25 @@ import hedgehogAtlas from "./assets/critters/hedgehog.json";
 
 const W = 732;
 const H = 88;
-/** Ligne du sol : les pieds des créatures s'y posent. */
+/** Ground line: the creatures' feet rest on it. */
 const GROUND = 86;
 const FPS = 12;
-/** Quand toutes les créatures dorment au feu. */
+/** When every creature is asleep by the fire. */
 const CALM_FPS = 4;
-/** Pixels par seconde. */
+/** Pixels per second. */
 const SPEED = 170;
-/** Durée d'une réplique ponctuelle (« C'est fini ! », une erreur…). */
+/** How long a one-off line lasts ("All done!", an error…). */
 const QUIP_MS = 2600;
 
-// ---------------------------------------------------------------- lieux
+// ---------------------------------------------------------------- places
 
 type Station = "gate" | "library" | "telescope" | "bench" | "fire" | "terminal" | "antenna" | "board" | "mailbox";
 
-/** Abscisse de chaque poste, mesurée sur chaque décor (celui de jour est un peu décalé). */
+/** X of each station, measured on each scenery (the day one is slightly shifted). */
 const NIGHT: Record<Station, number> = { gate: 48, library: 146, telescope: 236, bench: 324, fire: 424, terminal: 506, antenna: 544, board: 606, mailbox: 694 };
 const DAY: Record<Station, number> = { gate: 72, library: 162, telescope: 258, bench: 332, fire: 436, terminal: 522, antenna: 556, board: 628, mailbox: 708 };
 
-// ---------------------------------------------------------------- ce que fait un outil : où, et ce que la créature dit
+// ---------------------------------------------------------------- what a tool does: where, and what the creature says
 
 interface Action {
   station: Station;
@@ -60,104 +61,104 @@ function parseInput(input: string): Record<string, unknown> {
   }
 }
 
-/** Une commande shell, dite comme un humain la décrirait. */
+/** A shell command, said the way a human would describe it. */
 export function bashAction(command: string): Action {
-  // On juge la vraie commande, pas le `cd dossier &&` qui la précède.
+  // Judge the real command, not the `cd folder &&` before it.
   const cmd = command.replace(/^\s*cd\s+\S+\s*(&&|;)\s*/, "").trim();
-  const t = (re: RegExp) => re.test(cmd);
-  if (t(/\b(vitest|jest|pytest|mocha|playwright)\b|\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|\bcargo\s+test\b|\bgo\s+test\b/)) return { station: "terminal", say: "Je lance les tests" };
-  if (t(/\b(tsc|webpack|esbuild)\b|\bvite\s+build\b|\b(npm|pnpm|yarn|bun)\s+run\s+build\b|\bcargo\s+(build|check)\b|\bmake\b|\bxcodebuild\b/)) return { station: "terminal", say: "Je compile le projet" };
-  if (t(/\b(eslint|prettier|clippy|ruff|biome)\b|\b(npm|pnpm)\s+run\s+(lint|format)\b/)) return { station: "terminal", say: "Je vérifie le style du code" };
-  if (t(/^(npm|pnpm|yarn|bun)\s+(i|install|add)\b|^pip3?\s+install\b|^cargo\s+add\b|^brew\s+install\b/)) return { station: "terminal", say: "J'installe des dépendances" };
-  if (t(/\b(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b|\btauri\s+dev\b/)) return { station: "terminal", say: "Je démarre le serveur" };
-  if (t(/^git\s+commit\b/)) return { station: "board", say: "Je fais un commit" };
-  if (t(/^git\s+push\b/)) return { station: "antenna", say: "J'envoie sur le dépôt" };
-  if (t(/^git\s+(log|show|blame)\b/)) return { station: "library", say: "Je relis l'historique git" };
-  if (t(/^git\s+(status|diff)\b/)) return { station: "bench", say: "Je regarde ce qui a changé" };
-  if (t(/^git\b/)) return { station: "terminal", say: `Je lance ${short(cmd, 24)}` };
-  if (t(/^gh\b/)) return { station: "antenna", say: "Je parle à GitHub" };
-  if (t(/^(cat|head|tail|less|bat|wc)\b|^sed\s+-n\b/)) return { station: "library", say: "Je lis un fichier" };
-  if (t(/^(grep|rg|ag|osgrep|fd)\b/)) return { station: "telescope", say: "Je fouille le code" };
-  if (t(/^(ls|tree|find|du)\b/)) return { station: "telescope", say: "Je fais le tour des dossiers" };
-  if (t(/^(curl|wget|http)\b/)) return { station: "antenna", say: "J'interroge une adresse web" };
-  if (t(/^(rm|mv|cp|mkdir|touch|chmod|ln)\b/)) return { station: "bench", say: "Je range des fichiers" };
-  if (t(/^(node|python3?|deno|bun|ruby)\b/)) return { station: "terminal", say: "Je lance un script" };
-  return { station: "terminal", say: `Je lance ${short(cmd.split(/\s+/).slice(0, 3).join(" "), 26)}` };
+  const is = (re: RegExp) => re.test(cmd);
+  if (is(/\b(vitest|jest|pytest|mocha|playwright)\b|\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b|\bcargo\s+test\b|\bgo\s+test\b/)) return { station: "terminal", say: t("Running the tests") };
+  if (is(/\b(tsc|webpack|esbuild)\b|\bvite\s+build\b|\b(npm|pnpm|yarn|bun)\s+run\s+build\b|\bcargo\s+(build|check)\b|\bmake\b|\bxcodebuild\b/)) return { station: "terminal", say: t("Building the project") };
+  if (is(/\b(eslint|prettier|clippy|ruff|biome)\b|\b(npm|pnpm)\s+run\s+(lint|format)\b/)) return { station: "terminal", say: t("Checking the code style") };
+  if (is(/^(npm|pnpm|yarn|bun)\s+(i|install|add)\b|^pip3?\s+install\b|^cargo\s+add\b|^brew\s+install\b/)) return { station: "terminal", say: t("Installing dependencies") };
+  if (is(/\b(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b|\btauri\s+dev\b/)) return { station: "terminal", say: t("Starting the server") };
+  if (is(/^git\s+commit\b/)) return { station: "board", say: t("Making a commit") };
+  if (is(/^git\s+push\b/)) return { station: "antenna", say: t("Pushing to the repo") };
+  if (is(/^git\s+(log|show|blame)\b/)) return { station: "library", say: t("Reading the git history") };
+  if (is(/^git\s+(status|diff)\b/)) return { station: "bench", say: t("Looking at what changed") };
+  if (is(/^git\b/)) return { station: "terminal", say: t("Running {cmd}", { cmd: short(cmd, 24) }) };
+  if (is(/^gh\b/)) return { station: "antenna", say: t("Talking to GitHub") };
+  if (is(/^(cat|head|tail|less|bat|wc)\b|^sed\s+-n\b/)) return { station: "library", say: t("Reading a file") };
+  if (is(/^(grep|rg|ag|osgrep|fd)\b/)) return { station: "telescope", say: t("Searching the code") };
+  if (is(/^(ls|tree|find|du)\b/)) return { station: "telescope", say: t("Looking through the folders") };
+  if (is(/^(curl|wget|http)\b/)) return { station: "antenna", say: t("Querying a web address") };
+  if (is(/^(rm|mv|cp|mkdir|touch|chmod|ln)\b/)) return { station: "bench", say: t("Tidying up files") };
+  if (is(/^(node|python3?|deno|bun|ruby)\b/)) return { station: "terminal", say: t("Running a script") };
+  return { station: "terminal", say: t("Running {cmd}", { cmd: short(cmd.split(/\s+/).slice(0, 3).join(" "), 26) }) };
 }
 
-/** Où va une créature pour un outil, et ce qu'elle annonce. */
+/** Where a creature goes for a tool, and what it announces. */
 export function toolAction(name: string, summary: string, inputText: string): Action {
   const input = parseInput(inputText);
   const file = base(str(input.file_path) || str(input.notebook_path) || summary);
-  if (name.startsWith("mcp__")) return { station: "antenna", say: `J'utilise ${name.split("__")[1] || "un serveur"}` };
+  if (name.startsWith("mcp__")) return { station: "antenna", say: t("Using {name}", { name: name.split("__")[1] || t("a server") }) };
   switch (name) {
     case "Read":
-      return { station: "library", say: `Je lis ${short(file, 26)}` };
+      return { station: "library", say: t("Reading {name}", { name: short(file, 26) }) };
     case "Grep":
-      return { station: "telescope", say: `Je cherche « ${short(str(input.pattern) || summary, 20)} »` };
+      return { station: "telescope", say: t("Searching for “{text}”", { text: short(str(input.pattern) || summary, 20) }) };
     case "Glob":
-      return { station: "telescope", say: `Je cherche les fichiers ${short(str(input.pattern) || summary, 20)}` };
+      return { station: "telescope", say: t("Looking for files {pattern}", { pattern: short(str(input.pattern) || summary, 20) }) };
     case "LSP":
-      return { station: "telescope", say: "J'analyse le code" };
+      return { station: "telescope", say: t("Analyzing the code") };
     case "ToolSearch":
-      return { station: "telescope", say: "Je cherche le bon outil" };
+      return { station: "telescope", say: t("Looking for the right tool") };
     case "Edit":
     case "MultiEdit":
-      return { station: "bench", say: `Je modifie ${short(file, 24)}` };
+      return { station: "bench", say: t("Editing {name}", { name: short(file, 24) }) };
     case "Write":
-      return { station: "bench", say: `J'écris ${short(file, 26)}` };
+      return { station: "bench", say: t("Writing {name}", { name: short(file, 26) }) };
     case "NotebookEdit":
-      return { station: "bench", say: "Je modifie le notebook" };
+      return { station: "bench", say: t("Editing the notebook") };
     case "Bash":
       return bashAction(str(input.command) || summary || inputText);
     case "BashOutput":
     case "TaskOutput":
     case "Monitor":
-      return { station: "terminal", say: "Je surveille une commande" };
+      return { station: "terminal", say: t("Watching a command") };
     case "KillShell":
     case "TaskStop":
-      return { station: "terminal", say: "J'arrête une commande" };
+      return { station: "terminal", say: t("Stopping a command") };
     case "WebSearch":
-      return { station: "antenna", say: `Je cherche « ${short(str(input.query) || summary, 20)} » sur le web` };
+      return { station: "antenna", say: t("Searching the web for “{text}”", { text: short(str(input.query) || summary, 20) }) };
     case "WebFetch": {
       let host = summary;
       try {
         host = new URL(str(input.url) || summary).host;
       } catch {
-        // Adresse illisible : on garde le résumé.
+        // Unreadable URL: keep the summary.
       }
-      return { station: "antenna", say: `Je lis ${short(host, 26)}` };
+      return { station: "antenna", say: t("Reading {name}", { name: short(host, 26) }) };
     }
     case "TodoWrite": {
       const todos = Array.isArray(input.todos) ? (input.todos as Record<string, unknown>[]) : [];
-      const now = todos.find((t) => t.status === "in_progress");
+      const now = todos.find((x) => x.status === "in_progress");
       const text = now ? str(now.activeForm) || str(now.content) : "";
-      return { station: "board", say: text ? short(text, 34) : "Je mets à jour ma liste" };
+      return { station: "board", say: text ? short(text, 34) : t("Updating my list") };
     }
     case "TaskCreate":
     case "TaskUpdate":
-      return { station: "board", say: "Je mets à jour ma liste" };
+      return { station: "board", say: t("Updating my list") };
     case "EnterPlanMode":
-      return { station: "board", say: "Je prépare un plan" };
+      return { station: "board", say: t("Making a plan") };
     case "ExitPlanMode":
-      return { station: "mailbox", say: "Mon plan est prêt" };
+      return { station: "mailbox", say: t("My plan is ready") };
     case "Skill":
-      return { station: "library", say: `Je consulte le skill ${short(str(input.skill) || summary, 18)}` };
+      return { station: "library", say: t("Checking the {name} skill", { name: short(str(input.skill) || summary, 18) }) };
     case "AskUserQuestion":
-      return { station: "mailbox", say: "J'ai une question pour toi" };
+      return { station: "mailbox", say: t("I have a question for you") };
     case "Artifact":
-      return { station: "board", say: "Je publie une page" };
+      return { station: "board", say: t("Publishing a page") };
     case "SubagentHandback":
-      // Outil interne du CLI : le sous-agent rend son rapport au principal.
-      return { station: "board", say: "Je rédige mon rapport" };
+      // CLI internal tool: the subagent hands its report to the main agent.
+      return { station: "board", say: t("Writing my report") };
     default:
-      return { station: "terminal", say: `J'utilise ${short(name, 20)}` };
+      return { station: "terminal", say: t("Using {name}", { name: short(name, 20) }) };
   }
 }
 
 type ToolBlock = Extract<Block, { t: "tool" }>;
 
-/** Plusieurs outils lancés d'un coup : un seul poste, une phrase qui les résume. */
+/** Several tools run at once: one station, one sentence that sums them up. */
 function batchAction(blocks: ToolBlock[]): Action {
   const actions = blocks.map((b) => toolAction(b.name, b.summary, b.input));
   if (actions.length === 1) return actions[0];
@@ -167,47 +168,47 @@ function batchAction(blocks: ToolBlock[]): Action {
   const counts = new Map<Station, number>();
   for (const a of actions) counts.set(a.station, (counts.get(a.station) ?? 0) + 1);
   const station = [...counts].sort((a, b) => b[1] - a[1])[0][0];
-  if (only === "Read") return { station, say: `Je lis ${n} fichiers` };
-  if (only === "Grep" || only === "Glob") return { station, say: `Je lance ${n} recherches` };
-  if (only === "Edit" || only === "Write" || only === "MultiEdit") return { station, say: `Je modifie ${n} fichiers` };
-  if (only === "Bash") return { station, say: `Je lance ${n} commandes` };
-  if (only === "WebFetch" || only === "WebSearch") return { station, say: `Je consulte ${n} pages web` };
-  return { station, say: `${actions[0].say}, et ${n - 1} autre${n > 2 ? "s" : ""} chose${n > 2 ? "s" : ""}` };
+  if (only === "Read") return { station, say: tp(n, "Reading {n} file", "Reading {n} files") };
+  if (only === "Grep" || only === "Glob") return { station, say: tp(n, "Running {n} search", "Running {n} searches") };
+  if (only === "Edit" || only === "Write" || only === "MultiEdit") return { station, say: tp(n, "Editing {n} file", "Editing {n} files") };
+  if (only === "Bash") return { station, say: tp(n, "Running {n} command", "Running {n} commands") };
+  if (only === "WebFetch" || only === "WebSearch") return { station, say: tp(n, "Reading {n} web page", "Reading {n} web pages") };
+  return { station, say: tp(n - 1, "{say}, and {n} more thing", "{say}, and {n} more things", { say: actions[0].say }) };
 }
 
-/** Ce que Claude demande quand il attend ton accord. */
+/** What Claude asks when it waits for your approval. */
 function permissionAsk(tool: string, inputText: string): string {
   const input = parseInput(inputText);
   switch (tool) {
     case "Bash":
-      return `Je peux lancer « ${short(str(input.command) || inputText, 22)} » ?`;
+      return t("Can I run “{cmd}”?", { cmd: short(str(input.command) || inputText, 22) });
     case "Edit":
     case "MultiEdit":
     case "Write":
-      return `Je peux modifier ${short(base(str(input.file_path)), 22)} ?`;
+      return t("Can I edit {name}?", { name: short(base(str(input.file_path)), 22) });
     case "WebFetch":
-      return "Je peux ouvrir cette page ?";
+      return t("Can I open this page?");
     case "AskUserQuestion":
-      return "J'ai une question pour toi";
+      return t("I have a question for you");
     case "ExitPlanMode":
-      return "Mon plan est prêt, tu valides ?";
+      return t("My plan is ready, approve it?");
     default:
-      return `Je peux utiliser ${tool.startsWith("mcp__") ? tool.split("__")[1] : tool} ?`;
+      return t("Can I use {name}?", { name: tool.startsWith("mcp__") ? tool.split("__")[1] : tool });
   }
 }
 
-// ---------------------------------------------------------------- créatures
+// ---------------------------------------------------------------- creatures
 
 type Species = "fox" | "cat" | "bunny" | "puppy" | "hedgehog";
 
-/** Planche au format Aseprite : une frame de 48 px par case, une étiquette par animation et par côté
- *  (Idle_East, Walk_West, Sleep_East, Idle_South…), et le point où les pattes touchent le sol. */
+/** Sheet in Aseprite format: one 48 px frame per cell, one tag per animation and per side
+ *  (Idle_East, Walk_West, Sleep_East, Idle_South…), and the point where the paws touch the ground. */
 interface SheetAtlas {
   frames: { frame: { x: number; y: number; w: number; h: number }; duration: number }[];
   meta: { frameTags: { name: string; from: number; to: number }[]; pivot: { x: number; y: number } };
 }
 
-/** Free Pets Pack de Frakassets (licence : src/assets/critters/LICENSE-Frakassets.txt), réduit aux animations utiles. */
+/** Free Pets Pack by Frakassets (license: src/assets/critters/LICENSE-Frakassets.txt), cut down to the animations we use. */
 const SHEETS: Record<Species, { url: string; atlas: SheetAtlas }> = {
   fox: { url: foxSheetUrl, atlas: foxAtlas as SheetAtlas },
   cat: { url: catSheetUrl, atlas: catAtlas as SheetAtlas },
@@ -216,7 +217,7 @@ const SHEETS: Record<Species, { url: string; atlas: SheetAtlas }> = {
   hedgehog: { url: hedgehogSheetUrl, atlas: hedgehogAtlas as SheetAtlas },
 };
 
-/** Frame d'une étiquette au temps t : la boucle suit les durées réglées dans Aseprite. */
+/** Frame of a tag at time t: the loop follows the durations set in Aseprite. */
 function frameAt(atlas: SheetAtlas, tag: string, t: number): number {
   const tg = atlas.meta.frameTags.find((x) => x.name === tag);
   if (!tg) return 0;
@@ -239,7 +240,7 @@ export function speciesOf(model: string | null | undefined): Species {
   return "hedgehog";
 }
 
-// ---------------------------------------------------------------- état du monde
+// ---------------------------------------------------------------- world state
 
 interface Critter {
   id: string;
@@ -247,24 +248,24 @@ interface Critter {
   x: number;
   station: Station;
   left: boolean;
-  /** Ce que la créature est en train de faire. */
+  /** What the creature is doing right now. */
   status: string;
-  /** Réplique ponctuelle, affichée à la place du statut jusqu'à `quipUntil`. */
+  /** One-off line, shown instead of the status until `quipUntil`. */
   quip: string;
   quipUntil: number;
   resting: boolean;
-  /** Va à la porte puis disparaît. */
+  /** Walks to the gate, then disappears. */
   leaving: boolean;
-  /** Sous-agent qui a fini : rejoint le principal pour son rapport, puis s'en va. */
+  /** Subagent that has finished: joins the main agent to report, then leaves. */
   reporting: boolean;
   reportedAt: number;
-  /** Retour au feu après la réplique de fin. */
+  /** Back to the fire after the closing line. */
   restAt: number;
   sinceMs: number;
   resume?: { station: Station; status: string };
-  /** Sous-agent : sa mission, pour son rapport. */
+  /** Subagent: its mission, for its report. */
   mission: string;
-  /** Décalage d'animation, pour que deux créatures ne respirent pas en même temps. */
+  /** Animation offset, so two creatures don't breathe in sync. */
   phase: number;
 }
 
@@ -273,16 +274,16 @@ interface Scene {
 }
 
 interface Deps {
-  /** Conversation affichée, ou null sur l'écran de départ. */
+  /** Conversation shown, or null on the start screen. */
   active: () => string | null;
-  /** Modèle d'une conversation (ou du brouillon quand sid est null). */
+  /** Model of a conversation (or of the draft when sid is null). */
   modelOf: (sid: string | null) => string | null;
 }
 
 const MAIN = "main";
 const KEY = "bh.world";
 
-/** Monde affiché (par défaut oui) ; choix propre à cette machine. */
+/** World shown (yes by default); a choice local to this machine. */
 export function worldShown(): boolean {
   try {
     return localStorage.getItem(KEY) !== "off";
@@ -297,7 +298,7 @@ export function setWorldShown(on: boolean) {
   try {
     localStorage.setItem(KEY, on ? "on" : "off");
   } catch {
-    // Sans stockage, le choix tient jusqu'à la fermeture.
+    // Without storage, the choice lasts until the app closes.
   }
   wakeWorld();
 }
@@ -325,7 +326,7 @@ export function initWorld(d: Deps) {
   let stations = dark.matches ? NIGHT : DAY;
 
   const scenes = new Map<string, Scene>();
-  /** Écran de départ : une créature qui attend près du feu. */
+  /** Start screen: one creature waiting by the fire. */
   const idle: Scene = { critters: new Map() };
 
   const scene = (sid: string): Scene => {
@@ -373,7 +374,7 @@ export function initWorld(d: Deps) {
     wake();
   }
 
-  /** Fin de tour : une réplique sur place, puis retour au feu. */
+  /** End of turn: a line on the spot, then back to the fire. */
   function finish(sid: string, text: string) {
     const s = scenes.get(sid);
     if (!s) return;
@@ -390,7 +391,7 @@ export function initWorld(d: Deps) {
     }
   }
 
-  /** Événement en direct d'une conversation (pas la relecture d'un historique). */
+  /** Live event from a conversation (not a history replay). */
   function onEvent(ev: UiEvent) {
     switch (ev.kind) {
       case "assistant": {
@@ -398,15 +399,15 @@ export function initWorld(d: Deps) {
         const tools = ev.blocks.filter((b): b is ToolBlock => b.t === "tool");
         const isAgent = (b: ToolBlock) => b.name === "Agent" || b.name === "Task";
         if (!ev.parent) {
-          // Sous-agents lancés : ils arrivent par la porte, le principal va les accueillir.
+          // Subagents launched: they come in through the gate, the main agent goes to greet them.
           for (const b of tools.filter(isAgent)) {
             const input = parseInput(b.input);
-            const mission = short(str(input.description) || str(input.subagent_type) || "une mission", 28);
+            const mission = short(str(input.description) || str(input.subagent_type) || t("a mission"), 28);
             const sub = spawn(s, b.id, speciesOf(str(input.model) || d.modelOf(ev.sid)), "gate");
             sub.mission = mission;
-            go(sub, "gate", `Mission : ${mission}`);
-            say(sub, "Me voilà !", 1600);
-            go(main(ev.sid), "gate", `J'envoie de l'aide : ${mission}`);
+            go(sub, "gate", t("Mission: {mission}", { mission }));
+            say(sub, t("Here I am!"), 1600);
+            go(main(ev.sid), "gate", t("Sending help: {mission}", { mission }));
           }
         }
         const work = ev.parent ? tools : tools.filter((b) => !isAgent(b));
@@ -416,15 +417,15 @@ export function initWorld(d: Deps) {
           const a = batchAction(work);
           go(c, a.station, a.say);
         } else if (!ev.parent && !tools.length && ev.blocks.some((b) => b.t === "text" && b.text.trim())) {
-          // Réponse écrite : la boîte aux lettres, c'est ce qui te parle.
-          go(c, "mailbox", "Je t'écris la réponse");
+          // Written reply: the mailbox is what talks to you.
+          go(c, "mailbox", t("Writing you the answer"));
         }
         return;
       }
       case "delta": {
-        // Texte en direct (conversation affichée seulement) : il t'écrit.
+        // Live text (shown conversation only): it is writing to you.
         const c = scenes.get(ev.sid)?.critters.get(MAIN);
-        if (c && !ev.thinking && !c.resting && c.station !== "mailbox") go(c, "mailbox", "Je t'écris la réponse");
+        if (c && !ev.thinking && !c.resting && c.station !== "mailbox") go(c, "mailbox", t("Writing you the answer"));
         return;
       }
       case "toolResult": {
@@ -432,16 +433,16 @@ export function initWorld(d: Deps) {
         if (!s) return;
         const sub = s.critters.get(ev.toolUseId);
         if (sub && !ev.parent) {
-          // Le sous-agent rentre faire son rapport au principal avant de partir.
+          // The subagent comes back to report to the main agent before leaving.
           sub.reporting = true;
-          sub.status = ev.isError ? "Je n'ai pas réussi…" : `C'est fait : ${sub.mission}`;
+          sub.status = ev.isError ? t("I couldn't do it…") : t("Done: {mission}", { mission: sub.mission });
           sub.resting = false;
           wake();
           return;
         }
         if (ev.isError) {
           const owner = s.critters.get(ev.parent ?? MAIN);
-          if (owner) say(owner, "Aïe, ça n'a pas marché", 2000);
+          if (owner) say(owner, t("Oops, that didn't work"), 2000);
         }
         return;
       }
@@ -455,23 +456,23 @@ export function initWorld(d: Deps) {
         const c = scenes.get(ev.sid)?.critters.get(MAIN);
         if (c?.resume && c.station === "mailbox") {
           go(c, c.resume.station, c.resume.status);
-          say(c, "Merci !", 1200);
+          say(c, t("Thanks!"), 1200);
         }
         if (c) c.resume = undefined;
         return;
       }
       case "result":
-        finish(ev.sid, ev.isError ? "Je me suis arrêté sur une erreur" : "C'est fini !");
+        finish(ev.sid, ev.isError ? t("I stopped on an error") : t("All done!"));
         return;
       case "sessionUpdate": {
         const sid = ev.session.sid;
         if (ev.session.state === "busy") {
           const c = main(sid);
-          if (c.resting || c.restAt) go(c, "board", "Je réfléchis…");
+          if (c.resting || c.restAt) go(c, "board", t("Thinking…"));
           return;
         }
         if (ev.session.state === "ready" || ev.session.state === "starting") return;
-        // Processus suspendu ou arrêté : tout le monde rentre.
+        // Process suspended or stopped: everyone goes home.
         const s = scenes.get(sid);
         for (const c of s?.critters.values() ?? []) {
           if (c.id === MAIN) rest(c);
@@ -488,7 +489,7 @@ export function initWorld(d: Deps) {
     }
   }
 
-  // ------------------------------------------------------------ rendu
+  // ------------------------------------------------------------ rendering
 
   let timer = 0;
   let last = performance.now();
@@ -505,7 +506,7 @@ export function initWorld(d: Deps) {
     return idle;
   }
 
-  /** Abscisse visée : à son poste, côte à côte avec les autres, ou face au principal pour un rapport. */
+  /** Target x: at its station, side by side with the others, or facing the main agent for a report. */
   function targetX(s: Scene, c: Critter): number {
     if (c.reporting && !c.leaving) {
       const boss = s.critters.get(MAIN);
@@ -513,7 +514,7 @@ export function initWorld(d: Deps) {
     }
     const here = [...s.critters.values()].filter((o) => o.station === c.station && !o.reporting && !o.leaving);
     const i = Math.max(0, here.indexOf(c));
-    // Au feu, on s'assoit sur la bûche de part et d'autre des flammes.
+    // At the fire, they sit on the log on either side of the flames.
     const spread = c.station === "fire" ? [-34, 34, -58, 58] : [0, -36, 36, -72, 72];
     const x = stations[c.station] + (spread[i] ?? i * 36);
     return Math.min(W - 20, Math.max(20, x));
@@ -529,25 +530,25 @@ export function initWorld(d: Deps) {
         continue;
       }
       if (c.reporting && !c.leaving) {
-        // Arrivé devant le principal : il fait son rapport, puis s'en va.
+        // In front of the main agent: it reports, then leaves.
         const boss = s.critters.get(MAIN);
         if (boss) c.left = boss.x < c.x;
         if (!c.reportedAt) c.reportedAt = now;
         else if (now - c.reportedAt > QUIP_MS) {
           c.leaving = true;
           go(c, "gate", "");
-          say(c, "À plus !", 1500);
+          say(c, t("See you!"), 1500);
         }
       } else if (c.leaving && c.station === "gate") {
         s.critters.delete(c.id);
       } else if (c.resting) {
-        // Au feu, on regarde les flammes.
+        // At the fire, face the flames.
         c.left = c.x > stations.fire;
       }
     }
   }
 
-  /** Un « pixel » du décor : 2 × 2 à cette résolution. */
+  /** One scenery "pixel": 2 × 2 at this resolution. */
   const dot = (x: number, y: number, w = 2, h = 2) => g.fillRect(x, y, w, h);
 
   function draw(s: Scene, now: number) {
@@ -557,7 +558,7 @@ export function initWorld(d: Deps) {
       g.fillStyle = dark.matches ? "#0b1146" : "#8fc4f0";
       g.fillRect(0, 0, W, H);
     }
-    // Le feu vacille.
+    // The fire flickers.
     g.fillStyle = "#ffd36b";
     const f = Math.floor(now / 160) % 3;
     if (f !== 2) dot(stations.fire + (f ? 2 : -4), 64 - f * 4);
@@ -568,7 +569,7 @@ export function initWorld(d: Deps) {
     for (const c of list) {
       const walking = Math.abs(targetX(s, c) - c.x) > 1;
       const talking = !!c.quip && now < c.quipUntil;
-      // Animations du pack : marche, sommeil au feu, joie quand elle parle, de face quand elle t'attend.
+      // Pack animations: walking, sleeping by the fire, happy when talking, facing you while waiting for you.
       const sheet = sheets[c.species];
       const side = c.left ? "West" : "East";
       const tag = walking
@@ -586,7 +587,7 @@ export function initWorld(d: Deps) {
       const y = GROUND - 1 - pivot.y;
       if (sheet.img.complete && sheet.img.naturalWidth) g.drawImage(sheet.img, f.x, f.y, f.w, f.h, x, y, f.w, f.h);
       if (c.resting && !talking && now - c.sinceMs > 3000) {
-        // Endormi : un « z » qui monte.
+        // Asleep: a rising "z".
         const z = Math.floor(now / 500) % 3;
         g.fillStyle = dark.matches ? "#f3ead3" : "#2a2135";
         const zx = x + pivot.x + 10 + z * 2;
@@ -597,11 +598,11 @@ export function initWorld(d: Deps) {
       }
       const text = talking ? c.quip : c.resting ? "" : c.status;
       if (text) {
-        // Bulle gardée dans la bande ; deux voisines s'empilent.
+        // Bubble kept inside the strip; two neighbors stack up.
         const left = (c.x / W) * 100;
-        // Près d'un bord, la bulle s'ancre de ce côté pour ne pas sortir du cadre.
+        // Near an edge, the bubble anchors to that side so it stays inside the frame.
         const side = left < 25 ? " is-start" : left > 75 ? " is-end" : "";
-        // Étendue estimée de la bulle en pixels affichés ; elle monte d'un cran tant qu'elle en chevauche une autre.
+        // Estimated bubble extent in on-screen pixels; it moves up a level while it overlaps another one.
         const px = (c.x / W) * frameW;
         const width = Math.min(240, text.length * 6.2 + 18);
         const from = side === " is-start" ? px - 18 : side === " is-end" ? px + 18 - width : px - width / 2;
@@ -630,12 +631,12 @@ export function initWorld(d: Deps) {
     const now = Date.now();
     step(dt, s, now);
     draw(s, now);
-    // Tout le monde dort et rien ne bouge : 4 images par seconde suffisent (mesuré : ~6 % de CPU à 12 i/s).
+    // Everyone asleep and nothing moving: 4 frames per second is enough (measured: ~6% CPU at 12 fps).
     const calm = [...s.critters.values()].every((c) => c.resting && !(c.quip && now < c.quipUntil) && Math.abs(targetX(s, c) - c.x) <= 1);
     timer = window.setTimeout(frame, calm ? 1000 / CALM_FPS : 1000 / FPS);
   }
 
-  /** Relance l'animation si elle dormait. */
+  /** Restarts the animation if it was asleep. */
   function wake() {
     if (timer || !shown()) return;
     last = performance.now();

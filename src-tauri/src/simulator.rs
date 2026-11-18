@@ -1,10 +1,10 @@
-//! Simulateurs iOS : liste, démarrage et réglages par `simctl` ; écran et touches par le
-//! pont `sim-bridge`. Le pont ne tourne que pendant que l'onglet est affiché ou que Claude
-//! s'en sert, et seule la dernière image est gardée : l'interface peut prendre du retard
-//! sans que rien ne s'empile.
+//! iOS simulators: list, boot and settings through `simctl`; screen and touches through the
+//! `sim-bridge` bridge. The bridge runs only while the tab is shown or Claude uses it,
+//! and only the last frame is kept: the UI can fall behind without anything piling up.
 
 use crate::events::UiEvent;
 use crate::hub::Hub;
+use crate::i18n::tr;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -20,12 +20,12 @@ use tokio::time::timeout;
 const XCRUN: &str = "/usr/bin/xcrun";
 const MAX_PACKET: usize = 64 * 1024 * 1024;
 const FRAMES_PER_SECOND: &str = "30";
-/// Au-delà, la prochaine demande d'image repart de zéro : l'interface n'attend jamais indéfiniment.
+/// Beyond this, the next frame request starts over: the UI never waits forever.
 const FRAME_WAIT: Duration = Duration::from_secs(1);
 const CAPTURE_MAX_AGE: Duration = Duration::from_secs(24 * 3600);
-/// Le pont reste branché ce temps après la dernière action de Claude, sans onglet ouvert.
+/// The bridge stays connected this long after Claude's last action, with no tab open.
 const AGENT_HOLD: Duration = Duration::from_secs(30);
-/// Un appareil qui démarre peut mettre un moment à avoir une image.
+/// A booting device can take a while to have a frame.
 const FIRST_FRAME: Duration = Duration::from_secs(20);
 const SETTLE_QUIET: Duration = Duration::from_millis(300);
 const SETTLE_MAX: Duration = Duration::from_secs(4);
@@ -37,7 +37,7 @@ pub struct SimDevice {
     pub name: String,
     /// `Booted`, `Shutdown`, `Booting`…
     pub state: String,
-    /// « iOS 27.0 »
+    /// "iOS 27.0"
     pub runtime: String,
 }
 
@@ -45,7 +45,7 @@ struct Stream {
     id: u64,
     udid: String,
     input: mpsc::UnboundedSender<String>,
-    /// Le processus meurt quand ce canal se ferme.
+    /// The process dies when this channel closes.
     _stop: oneshot::Sender<()>,
 }
 
@@ -54,26 +54,26 @@ pub struct Simulator {
     captures: PathBuf,
     stream: Mutex<Option<Stream>>,
     latest: Mutex<Option<Arc<Vec<u8>>>>,
-    /// Numéro de la dernière image reçue.
+    /// Number of the last frame received.
     frames: watch::Sender<u64>,
     ui_seen: AtomicU64,
-    /// Taille des images du flux, en pixels : celle que voit Claude.
+    /// Size of the stream's frames, in pixels: the one Claude sees.
     image: Mutex<Option<(f64, f64)>>,
     input_ok: AtomicBool,
-    /// L'appareil affiché par le panneau, même onglet fermé.
+    /// The device shown by the panel, even with the tab closed.
     selected: Mutex<Option<String>>,
     ui_open: AtomicBool,
     window_hidden: AtomicBool,
     agent_active: AtomicBool,
     agent_run: AtomicU64,
-    /// Numéro de la dernière image remise à Claude.
+    /// Number of the last frame handed to Claude.
     agent_seen: AtomicU64,
-    /// Claude peut envoyer plusieurs actions d'un coup : elles passent une par une.
+    /// Claude can send several actions at once: they go through one by one.
     pub agent_turn: tokio::sync::Mutex<()>,
     next_id: AtomicU64,
 }
 
-/// Xcode est-il là ? Lu une fois : sans lui, le CLI n'a pas besoin de l'outil simulateur.
+/// Is Xcode there? Read once: without it, the CLI does not need the simulator tool.
 pub fn available() -> bool {
     static XCODE: OnceLock<bool> = OnceLock::new();
     *XCODE.get_or_init(|| {
@@ -84,12 +84,12 @@ pub fn available() -> bool {
     })
 }
 
-/// Le dossier développeur d'Xcode, ou un message lisible. `xcrun` ouvrirait sinon une fenêtre d'installation.
+/// Xcode's developer folder, or a readable message. `xcrun` would otherwise open an install window.
 async fn developer_dir() -> Result<String, String> {
     let out = Command::new("/usr/bin/xcode-select").arg("-p").stdin(Stdio::null()).output().await.map_err(|e| e.to_string())?;
     let dir = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if !out.status.success() || !dir.contains(".app/") {
-        return Err("Le simulateur iOS a besoin d'Xcode.".into());
+        return Err(tr("The iOS simulator needs Xcode.", "Le simulateur iOS a besoin d'Xcode.").into());
     }
     Ok(dir)
 }
@@ -97,16 +97,19 @@ async fn developer_dir() -> Result<String, String> {
 async fn simctl(args: &[&str], limit: Duration) -> Result<String, String> {
     developer_dir().await?;
     let run = Command::new(XCRUN).arg("simctl").args(args).stdin(Stdio::null()).kill_on_drop(true).output();
-    let out = tokio::time::timeout(limit, run).await.map_err(|_| "Le simulateur ne répond pas.".to_string())?.map_err(|e| e.to_string())?;
+    let out = tokio::time::timeout(limit, run)
+        .await
+        .map_err(|_| tr("The simulator is not responding.", "Le simulateur ne répond pas.").to_string())?
+        .map_err(|e| e.to_string())?;
     if out.status.success() {
         return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
     }
     let message = String::from_utf8_lossy(&out.stderr);
-    let first = message.lines().next().unwrap_or("simctl a échoué").trim();
+    let first = message.lines().next().unwrap_or(tr("simctl failed", "simctl a échoué")).trim();
     Err(first.strip_prefix("An error was encountered processing the command").unwrap_or(first).to_string())
 }
 
-/// `com.apple.CoreSimulator.SimRuntime.iOS-27-0` → (27, 0), pour un iOS seulement.
+/// `com.apple.CoreSimulator.SimRuntime.iOS-27-0` → (27, 0), for iOS only.
 fn ios_version(runtime: &str) -> Option<(u32, u32)> {
     let rest = runtime.rsplit('.').next()?.strip_prefix("iOS-")?;
     let mut parts = rest.split('-').map(|p| p.parse::<u32>().ok());
@@ -140,6 +143,18 @@ fn parse_devices(json: &str) -> Vec<SimDevice> {
     devices
 }
 
+/// The bridge reports its failures in English: shown in the UI language when it is known.
+fn bridge_message(message: &str) -> String {
+    const MESSAGES: [(&str, &str); 5] = [
+        ("CoreSimulator not found: is Xcode installed?", "CoreSimulator est introuvable : Xcode est-il installé ?"),
+        ("SimulatorKit not found in this Xcode.", "SimulatorKit est introuvable dans cet Xcode."),
+        ("This simulator no longer exists.", "Ce simulateur n'existe plus."),
+        ("This simulator's screen is unavailable: is it booted?", "L'écran de ce simulateur est indisponible : est-il démarré ?"),
+        ("This Xcode does not expose the simulator screen as expected.", "Cet Xcode n'expose pas l'écran du simulateur comme attendu."),
+    ];
+    MESSAGES.iter().find(|(en, _)| *en == message).map_or(message, |(en, fr)| tr(*en, *fr)).to_string()
+}
+
 pub async fn devices() -> Result<Vec<SimDevice>, String> {
     Ok(parse_devices(&simctl(&["list", "devices", "available", "-j"], Duration::from_secs(20)).await?))
 }
@@ -151,7 +166,7 @@ pub async fn boot(udid: &str) -> Result<(), String> {
     }
 }
 
-/// Copie du texte dans le presse-papiers de l'appareil. Sans locale UTF-8, `pbcopy` lit du Mac Roman.
+/// Copies text to the device clipboard. Without a UTF-8 locale, `pbcopy` reads Mac Roman.
 pub async fn copy_to_device(udid: &str, text: &str) -> Result<(), String> {
     developer_dir().await?;
     let mut child = Command::new(XCRUN)
@@ -163,18 +178,18 @@ pub async fn copy_to_device(udid: &str, text: &str) -> Result<(), String> {
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| e.to_string())?;
-    let mut stdin = child.stdin.take().ok_or("Presse-papiers indisponible")?;
+    let mut stdin = child.stdin.take().ok_or("Clipboard unavailable")?;
     stdin.write_all(text.as_bytes()).await.map_err(|e| e.to_string())?;
     drop(stdin);
-    let status = timeout(Duration::from_secs(10), child.wait()).await.map_err(|_| "Le simulateur ne répond pas.".to_string())?.map_err(|e| e.to_string())?;
+    let status = timeout(Duration::from_secs(10), child.wait()).await.map_err(|_| "The simulator is not responding.".to_string())?.map_err(|e| e.to_string())?;
     if status.success() {
         Ok(())
     } else {
-        Err("Le presse-papiers du simulateur a refusé le texte.".into())
+        Err("The simulator clipboard refused the text.".into())
     }
 }
 
-/// Claviers et langues de l'appareil, tels que les donne `defaults`.
+/// The device's keyboards and languages, as `defaults` gives them.
 pub async fn keyboard_settings(udid: &str) -> (Option<String>, Option<String>) {
     let read = |key: &'static str| async move { simctl(&["spawn", udid, "defaults", "read", "-g", key], Duration::from_secs(10)).await.ok() };
     (read("AppleKeyboards").await, read("AppleLanguages").await)
@@ -184,11 +199,11 @@ pub async fn open_url(udid: &str, url: &str) -> Result<(), String> {
     simctl(&["openurl", udid, url], Duration::from_secs(20)).await.map(|_| ())
 }
 
-/// Lit ou change l'apparence : `light`, `dark`, ou `unsupported` sur un appareil qui ne la gère pas.
+/// Reads or changes the appearance: `light`, `dark`, or `unsupported` on a device that lacks it.
 pub async fn appearance(udid: &str, value: Option<&str>) -> Result<String, String> {
     if let Some(value) = value {
         if value != "light" && value != "dark" {
-            return Err("Apparence inconnue".into());
+            return Err(tr("Unknown appearance", "Apparence inconnue").into());
         }
         simctl(&["ui", udid, "appearance", value], Duration::from_secs(10)).await?;
         return Ok(value.into());
@@ -237,13 +252,13 @@ impl Simulator {
         }
     }
 
-    /// L'onglet s'ouvre sur cet appareil.
+    /// The tab opens on this device.
     pub async fn attach_ui(self: &Arc<Self>, udid: String) -> Result<(), String> {
         self.ui_open.store(true, Ordering::SeqCst);
         self.open_stream(udid).await
     }
 
-    /// L'onglet se ferme : le pont s'arrête, sauf si Claude s'en sert encore.
+    /// The tab closes: the bridge stops, unless Claude still uses it.
     pub fn detach_ui(&self) {
         self.ui_open.store(false, Ordering::SeqCst);
         if !self.agent_active.load(Ordering::SeqCst) {
@@ -251,14 +266,14 @@ impl Simulator {
         }
     }
 
-    /// Claude agit sur cet appareil : branche le pont, garde-le un moment et attend une première image.
+    /// Claude acts on this device: connect the bridge, keep it a while and wait for a first frame.
     pub async fn agent_attach(self: &Arc<Self>, udid: &str) -> Result<(), String> {
         let same = self.stream.lock().unwrap().as_ref().is_some_and(|s| s.udid == udid);
         if !same {
             self.open_stream(udid.to_string()).await?;
         }
         let starting = !self.agent_active.swap(true, Ordering::SeqCst);
-        // Fenêtre cachée : le flux était en pause, or Claude a besoin de voir l'écran.
+        // Hidden window: the stream was paused, but Claude needs to see the screen.
         self.send_line("resume".to_string());
         let run = self.agent_run.fetch_add(1, Ordering::SeqCst) + 1;
         let me = self.clone();
@@ -274,7 +289,7 @@ impl Simulator {
                 me.send_line("pause".to_string());
             }
         });
-        // Une seule fois par série d'actions : fermer le panneau pendant que Claude travaille reste possible.
+        // Once per series of actions: closing the panel while Claude works stays possible.
         if starting || !same {
             self.hub.emit(UiEvent::Simulator { udid: udid.to_string(), state: "agent".into(), message: None });
         }
@@ -305,7 +320,7 @@ impl Simulator {
         *self.frames.borrow()
     }
 
-    /// Claude a-t-il déjà vu la dernière image ?
+    /// Has Claude already seen the last frame?
     pub fn agent_is_current(&self) -> bool {
         self.agent_seen.load(Ordering::SeqCst) == self.frame_count()
     }
@@ -328,7 +343,7 @@ impl Simulator {
         }
     }
 
-    /// La dernière image une fois l'écran calmé : aucune nouvelle image pendant `SETTLE_QUIET`.
+    /// The last frame once the screen has settled: no new frame during `SETTLE_QUIET`.
     pub async fn settled(&self, since: u64, first_change: Duration) -> Option<Arc<Vec<u8>>> {
         let mut frames = self.frames.subscribe();
         let deadline = Instant::now() + SETTLE_MAX;
@@ -371,9 +386,9 @@ impl Simulator {
             .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|e| format!("Pont du simulateur introuvable : {e}"))?;
-        let mut stdin = child.stdin.take().ok_or("Entrée du pont indisponible")?;
-        let stdout = child.stdout.take().ok_or("Sortie du pont indisponible")?;
+            .map_err(|e| tr(format!("Simulator bridge not found: {e}"), format!("Pont du simulateur introuvable : {e}")))?;
+        let mut stdin = child.stdin.take().ok_or(tr("Bridge input unavailable", "Entrée du pont indisponible"))?;
+        let stdout = child.stdout.take().ok_or(tr("Bridge output unavailable", "Sortie du pont indisponible"))?;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (input, mut lines) = mpsc::unbounded_channel::<String>();
         let (stop, stopped) = oneshot::channel();
@@ -432,12 +447,12 @@ impl Simulator {
                             *self.image.lock().unwrap() = Some((width, height));
                         }
                     }
-                    Some("error") => failed = event["message"].as_str().map(String::from),
+                    Some("error") => failed = event["message"].as_str().map(bridge_message),
                     _ => {}
                 }
             }
         }
-        // Fin imprévue : appareil éteint ailleurs, ou Xcode incompatible.
+        // Unexpected end: device shut down elsewhere, or incompatible Xcode.
         let mut guard = self.stream.lock().unwrap();
         if guard.as_ref().is_some_and(|s| s.id == id) {
             *guard = None;
@@ -458,7 +473,7 @@ impl Simulator {
         *self.image.lock().unwrap() = None;
     }
 
-    /// La dernière image pas encore affichée, vide si rien n'a changé pendant `FRAME_WAIT`.
+    /// The last frame not yet shown, empty if nothing changed during `FRAME_WAIT`.
     pub async fn next_frame(&self) -> Vec<u8> {
         let seen = self.ui_seen.load(Ordering::SeqCst);
         let mut frames = self.frames.subscribe();
@@ -478,7 +493,7 @@ impl Simulator {
         self.latest.lock().unwrap().as_ref().map(|frame| frame.to_vec()).unwrap_or_default()
     }
 
-    /// Une ligne de l'interface. Fenêtre cachée : le flux se met en pause, sauf si Claude s'en sert.
+    /// A line from the UI. Hidden window: the stream pauses, unless Claude uses it.
     pub fn input(&self, line: String) {
         if line.contains('\n') {
             return;
@@ -494,7 +509,7 @@ impl Simulator {
         self.send_line(line);
     }
 
-    /// Une capture en pleine résolution, jetable : les précédentes de plus d'un jour sont effacées.
+    /// A disposable full-resolution capture: previous ones older than a day are erased.
     pub async fn screenshot(&self, udid: &str) -> Result<String, String> {
         std::fs::create_dir_all(&self.captures).map_err(|e| e.to_string())?;
         if let Ok(entries) = std::fs::read_dir(&self.captures) {
@@ -518,10 +533,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ne_garde_que_ios_du_plus_recent_au_plus_ancien() {
+    fn keeps_only_ios_newest_first() {
         let json = r#"{"devices":{
-            "com.apple.CoreSimulator.SimRuntime.iOS-18-2":[{"udid":"a","name":"Vieux","state":"Shutdown"}],
-            "com.apple.CoreSimulator.SimRuntime.watchOS-11-0":[{"udid":"w","name":"Montre","state":"Shutdown"}],
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-2":[{"udid":"a","name":"Old","state":"Shutdown"}],
+            "com.apple.CoreSimulator.SimRuntime.watchOS-11-0":[{"udid":"w","name":"Watch","state":"Shutdown"}],
             "com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"udid":"b","name":"iPhone 18 Pro","state":"Booted"}]
         }}"#;
         let list = parse_devices(json);
@@ -530,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn une_reponse_illisible_ne_donne_aucun_appareil() {
-        assert!(parse_devices("pas du json").is_empty());
+    fn unreadable_answer_gives_no_device() {
+        assert!(parse_devices("not json").is_empty());
     }
 }

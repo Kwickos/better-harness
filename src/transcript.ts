@@ -1,11 +1,11 @@
-// Modèle d'une session côté UI + rendu DOM du transcript.
-// Perf : seule la session affichée a un DOM ; le Markdown d'un bloc terminé n'est
-// calculé qu'une fois (y compris en streaming, cf. LiveMarkdown) ; le détail des
-// outils n'est construit qu'à l'ouverture ; `content-visibility` saute la mise en
-// page des messages hors écran.
+// UI-side model of a session + DOM rendering of the transcript.
+// Perf: only the displayed session has a DOM; the Markdown of a finished block is
+// computed once (streaming included, see LiveMarkdown); tool details are only
+// built when opened; `content-visibility` skips layout of off-screen messages.
 import { countsLabel, renderLines, toolDiff } from "./diff";
 import type { Artifact, Attachment, Block, InitEv, PermissionEv, RateLimitEv, ResultEv, SessionInfo, ToolResultEv } from "./api";
 import { copyButton, decorateCode, wrapWithCopy } from "./copy";
+import { t, tp } from "./i18n";
 import { icon, type IconName } from "./icons";
 import { DUR, enter, leave } from "./motion";
 import { appendWithMentions } from "./mentions";
@@ -22,7 +22,7 @@ export interface ToolView {
   input: string;
   result?: { text: string; isError: boolean; truncated: boolean };
   sub: number;
-  /** Fichiers montrés par `send_files`, décrits une fois puis gardés pour les réaffichages. */
+  /** Files shown by `send_files`, described once then kept for re-renders. */
   files?: Attachment[];
 }
 export type BlockView = { t: "text"; text: string; html?: string } | { t: "thinking"; text: string } | ToolView;
@@ -36,9 +36,9 @@ export type Item =
 export class SessionView {
   items: Item[] = [];
   tools = new Map<string, ToolView>();
-  /** Les artefacts de la conversation, le plus récent d'abord. */
+  /** The conversation's artifacts, most recent first. */
   artifacts: Artifact[] = [];
-  /** Un artefact vient d'être publié ou demandé : à montrer si la conversation est affichée. */
+  /** An artifact was just published or requested: show it if the conversation is on screen. */
   artifactToShow: string | null = null;
   perms = new Map<string, PermissionEv>();
   stream = { text: "", thinking: false };
@@ -69,7 +69,7 @@ export class SessionView {
     return it;
   }
 
-  /** Les blocs d'un même message arrivent en plusieurs événements : on fusionne par id. */
+  /** Blocks of one message arrive in several events: merge them by id. */
   addAssistant(id: string, blocks: Block[]): { item: Item; added: BlockView[] } {
     const last = this.items[this.items.length - 1];
     let item: Item & { k: "assistant" };
@@ -138,9 +138,8 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, 
   return e;
 }
 
-// ---------------------------------------------------------------- lignes d'activité
+// ---------------------------------------------------------------- activity lines
 
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 const fileName = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 
 type Kind = "read" | "edit" | "bash" | "search" | "web" | "agent" | "ask" | "plan" | "other";
@@ -156,47 +155,47 @@ function kindOf(name: string): Kind {
   return "other";
 }
 
-/** Étape en cours, au présent : « Lecture de main.ts », « Exécution de npm run build ». */
-function runningLabel(t: ToolView): [string, string] {
-  switch (kindOf(t.name)) {
+/** Current step, in the present tense: "Reading main.ts", "Running npm run build". */
+function runningLabel(tool: ToolView): [string, string] {
+  switch (kindOf(tool.name)) {
     case "read":
-      return ["Lecture de", fileName(t.summary)];
+      return [t("Reading"), fileName(tool.summary)];
     case "edit":
-      return ["Modification de", fileName(t.summary)];
+      return [t("Editing"), fileName(tool.summary)];
     case "bash":
-      return ["Exécution de", t.summary];
+      return [t("Running"), tool.summary];
     case "search":
-      return ["Recherche de", t.summary];
+      return [t("Searching for"), tool.summary];
     case "web":
-      return [t.name === "WebSearch" ? "Recherche web" : "Lecture de", t.summary];
+      return [tool.name === "WebSearch" ? t("Web search") : t("Reading"), tool.summary];
     case "agent":
-      return ["Sous-agent :", t.summary];
+      return [t("Subagent:"), tool.summary];
     case "ask":
-      return ["Attend ta réponse", ""];
+      return [t("Waiting for your answer"), ""];
     case "plan":
-      return ["Attend ta validation du plan", ""];
+      return [t("Waiting for plan approval"), ""];
     default:
-      if (t.name === SIM_TOOL) return ["Simulateur :", simulatorAction(t.input)];
-      if (t.name === "Artifact") return ["Artefact :", artifactAction(t.input)];
-      return [t.name.replace(/^mcp__[^_]+__/, ""), t.summary];
+      if (tool.name === SIM_TOOL) return [t("Simulator:"), simulatorAction(tool.input)];
+      if (tool.name === "Artifact") return [t("Artifact:"), artifactAction(tool.input)];
+      return [tool.name.replace(/^mcp__[^_]+__/, ""), tool.summary];
   }
 }
 
 function doneLabel(tools: ToolView[], thinking: number): string {
   const c: Record<Kind, number> = { read: 0, edit: 0, bash: 0, search: 0, web: 0, agent: 0, ask: 0, plan: 0, other: 0 };
-  for (const t of tools) c[kindOf(t.name)]++;
+  for (const tool of tools) c[kindOf(tool.name)]++;
   const parts = [
-    c.read && plural(c.read, "fichier lu", "fichiers lus"),
-    c.edit && plural(c.edit, "fichier modifié", "fichiers modifiés"),
-    c.bash && plural(c.bash, "commande", "commandes"),
-    c.search && plural(c.search, "recherche", "recherches"),
-    c.web && plural(c.web, "page web", "pages web"),
-    c.agent && plural(c.agent, "sous-agent", "sous-agents"),
-    c.ask && plural(c.ask, "question", "questions"),
-    c.plan && plural(c.plan, "plan proposé", "plans proposés"),
-    c.other && plural(c.other, "outil", "outils"),
+    c.read && tp(c.read, "{n} file read", "{n} files read"),
+    c.edit && tp(c.edit, "{n} file edited", "{n} files edited"),
+    c.bash && tp(c.bash, "{n} command", "{n} commands"),
+    c.search && tp(c.search, "{n} search", "{n} searches"),
+    c.web && tp(c.web, "{n} web page", "{n} web pages"),
+    c.agent && tp(c.agent, "{n} subagent", "{n} subagents"),
+    c.ask && tp(c.ask, "{n} question", "{n} questions"),
+    c.plan && tp(c.plan, "{n} plan proposed", "{n} plans proposed"),
+    c.other && tp(c.other, "{n} tool", "{n} tools"),
   ].filter(Boolean) as string[];
-  if (!parts.length) return thinking ? "Réflexion" : "";
+  if (!parts.length) return thinking ? t("Thinking") : "";
   const s = parts.join(", ");
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -209,9 +208,9 @@ interface Group {
   thinking: number;
 }
 
-// ---------------------------------------------------------------- rendu
+// ---------------------------------------------------------------- rendering
 
-/** Ce qui arrive en direct : jamais à l'ouverture d'une conversation, où tout s'affiche d'un bloc. */
+/** What arrives live: never when a conversation opens, where everything shows at once. */
 const appear = (node: HTMLElement) => void enter(node, { opacity: "0", transform: "translateY(4px)" });
 
 export class TranscriptRenderer {
@@ -230,7 +229,7 @@ export class TranscriptRenderer {
     private streamEl: HTMLElement,
     private onLoadMore: () => void,
     private messageActions: { edit: (text: string) => void; retry: (text: string) => void },
-    /** Bloc des fichiers que Claude montre ; `settled` quand il a pris sa taille. */
+    /** Block of files Claude shows; `settled` once it has taken its size. */
     private attachments: (tv: ToolView, settled: () => void) => HTMLElement,
   ) {
     scroller.addEventListener(
@@ -255,7 +254,7 @@ export class TranscriptRenderer {
     this.group = undefined;
     const frag = document.createDocumentFragment();
     if (view?.hasMore) {
-      const more = el("button", "load-more", "Messages précédents");
+      const more = el("button", "load-more", t("Earlier messages"));
       more.type = "button";
       more.addEventListener("click", () => this.onLoadMore());
       frag.append(more);
@@ -270,8 +269,8 @@ export class TranscriptRenderer {
   }
 
   /**
-   * Les messages visibles passent dans un calque qui s'efface pendant que le nouveau contenu apparaît :
-   * il n'y a jamais d'image où la zone est vide. Seuls ceux à l'écran sont déplacés, le reste est jeté.
+   * Visible messages move to a layer that fades out while the new content appears:
+   * there is never a frame where the area is empty. Only on-screen ones are moved, the rest is dropped.
    */
   private fadeOutCurrent() {
     const s = this.scroller;
@@ -291,39 +290,39 @@ export class TranscriptRenderer {
     column.append(...seen);
     ghost.append(column);
     parent.append(ghost);
-    // Même durée que l'entrée, sans décalage : mesuré à 60 i/s, un départ plus rapide fait replonger la
-    // zone jusqu'au fond pendant 50 ms, et c'est ce creux qui se voit comme un flash.
+    // Same duration as the entry, no offset: measured at 60 fps, a faster exit lets the area dip
+    // to the background for 50 ms, and that dip is what shows as a flash.
     void leave(ghost, { opacity: 0 }, { duration: DUR.fast }).then(() => ghost.remove());
   }
 
   /**
-   * Au montage, le fil se place tout de suite sur son dernier message, sans attendre l'image suivante.
-   * `content-visibility` est levé le temps de cette mise en page : sinon les messages n'ont qu'une hauteur
-   * estimée, et le fil saute quand ils apparaissent.
+   * On mount, the thread lands on its last message right away, without waiting for the next frame.
+   * `content-visibility` is lifted for that layout: otherwise messages only have an estimated
+   * height, and the thread jumps when they appear.
    */
   private placeAtEnd() {
     const s = this.scroller;
     s.classList.add("is-mounting");
     s.scrollTop = s.scrollHeight;
-    // Sans ce délai, macOS fait clignoter la barre de défilement à chaque changement de conversation.
+    // Without this delay, macOS flashes the scrollbar on every conversation switch.
     window.setTimeout(() => s.classList.remove("is-mounting"), DUR.medium * 1000);
   }
 
-  /** La zone du fil vient peut-être d'être affichée : c'est seulement là qu'elle a une hauteur. */
+  /** The thread area may have just been shown: only then does it have a height. */
   afterShow() {
     this.scroller.scrollTop = this.scroller.scrollHeight;
   }
 
-  /** Ajoute un nouvel item ou complète l'item assistant existant. */
+  /** Adds a new item or completes the existing assistant item. */
   upsert(item: Item, added?: BlockView[]) {
     const existing = this.itemEls.get(item);
     if (existing && added && item.k === "assistant") {
       for (const b of added) {
         const n = this.renderBlock(b);
         if (!n) continue;
-        // Les actions restent sous le message, quel que soit le bloc qui arrive.
+        // Actions stay under the message, whatever block arrives.
         existing.insertBefore(n, existing.querySelector(":scope > .msg-actions"));
-        // Un texte a déjà été vu en direct : seule une nouvelle étape entre en mouvement.
+        // Text was already seen live: only a new step animates in.
         if (b.t !== "text") appear(n);
       }
       this.syncAssistantActions(item, existing);
@@ -340,14 +339,14 @@ export class TranscriptRenderer {
     if (d) {
       d.dataset.state = tv.result ? (tv.result.isError ? "error" : "done") : "running";
       const meta = d.querySelector(".tool-meta");
-      if (meta) meta.textContent = tv.sub ? plural(tv.sub, "étape", "étapes") : tv.result?.isError ? "échec" : "";
+      if (meta) meta.textContent = tv.sub ? tp(tv.sub, "{n} step", "{n} steps") : tv.result?.isError ? t("failed") : "";
       if (d.open) this.fillTool(d, tv);
     }
     const g = this.toolGroup.get(tv.id);
     if (g) this.refreshGroup(g);
   }
 
-  /** Réponse en cours d'écriture : Markdown rendu en direct (seul le dernier bloc est recalculé). */
+  /** Reply being written: Markdown rendered live (only the last block is recomputed). */
   setStream(text: string, replace: boolean) {
     if (replace || !this.live) {
       this.streamEl.replaceChildren();
@@ -396,10 +395,10 @@ export class TranscriptRenderer {
         this.syncAssistantActions(it, node);
         break;
       case "result": {
-        // Durée, tokens et coût n'encombrent pas la conversation ; seul un vrai échec s'affiche.
+        // Duration, tokens and cost don't clutter the conversation; only a real failure shows.
         const r = it.ev;
         const shown = r.isError && r.subtype !== "success";
-        node = el("div", shown ? "msg msg-error" : "msg-hidden", shown ? `La requête a échoué (${r.subtype}).` : undefined);
+        node = el("div", shown ? "msg msg-error" : "msg-hidden", shown ? t("The request failed ({subtype}).", { subtype: r.subtype }) : undefined);
         if (shown && r.text) node.title = r.text;
         if (shown) this.group = undefined;
         break;
@@ -429,7 +428,7 @@ export class TranscriptRenderer {
 
   private userActions(text: string): HTMLElement {
     const box = el("div", "msg-actions");
-    box.append(copyButton(() => text, "Copier", "msg-action"), this.action("pencil", "Modifier", () => this.messageActions.edit(text)));
+    box.append(copyButton(() => text, t("Copy"), "msg-action"), this.action("pencil", t("Edit"), () => this.messageActions.edit(text)));
     return box;
   }
 
@@ -442,7 +441,7 @@ export class TranscriptRenderer {
     return null;
   }
 
-  /** Sous un message qui contient du texte : copier sa réponse, ou renvoyer la question qui l'a produite. */
+  /** Under a message with text: copy its reply, or resend the question that produced it. */
   private syncAssistantActions(it: Extract<Item, { k: "assistant" }>, node: HTMLElement) {
     if (node.querySelector(":scope > .msg-actions") || !it.blocks.some((b) => b.t === "text")) return;
     const box = el("div", "msg-actions");
@@ -450,14 +449,14 @@ export class TranscriptRenderer {
       it.blocks
         .flatMap((b) => (b.t === "text" ? [b.text] : []))
         .join("\n\n");
-    box.append(copyButton(text, "Copier", "msg-action"));
+    box.append(copyButton(text, t("Copy"), "msg-action"));
     const question = this.previousUser(it);
-    if (question !== null) box.append(this.action("reload", "Réessayer", () => this.messageActions.retry(question)));
+    if (question !== null) box.append(this.action("reload", t("Retry"), () => this.messageActions.retry(question)));
     node.append(box);
     node.classList.add("has-actions");
   }
 
-  /** Un bloc texte s'affiche tel quel ; outils et réflexion rejoignent la ligne d'activité courante. */
+  /** A text block shows as is; tools and thinking join the current activity line. */
   private renderBlock(b: BlockView): HTMLElement | null {
     if (b.t === "text") {
       this.group = undefined;
@@ -467,7 +466,7 @@ export class TranscriptRenderer {
       decorateCode(d);
       return d;
     }
-    // Des fichiers montrés : ils prennent place dans le fil, hors de la ligne d'activité.
+    // Shown files: they take their place in the thread, outside the activity line.
     if (b.t === "tool" && b.name === FILES_TOOL) {
       this.group = undefined;
       return this.attachments(b, () => this.scrollToBottom());
@@ -506,21 +505,21 @@ export class TranscriptRenderer {
   }
 
   private refreshGroup(g: Group) {
-    const running = [...g.tools].reverse().find((t) => !t.result);
-    const errors = g.tools.filter((t) => t.result?.isError).length;
+    const running = [...g.tools].reverse().find((tool) => !tool.result);
+    const errors = g.tools.filter((tool) => tool.result?.isError).length;
     g.el.dataset.state = running ? "running" : errors ? "error" : "done";
     if (running) {
       const [verb, target] = runningLabel(running);
       g.label.replaceChildren(el("span", undefined, verb), " ", el("code", undefined, target));
     } else {
       g.label.textContent = doneLabel(g.tools, g.thinking);
-      if (errors) g.label.append(el("span", "act-err", `, ${plural(errors, "échec", "échecs")}`));
+      if (errors) g.label.append(el("span", "act-err", `, ${tp(errors, "{n} error", "{n} errors")}`));
     }
   }
 
   private thinkingRow(text: string): HTMLElement {
     const d = el("details", "tool is-thinking");
-    d.append(el("summary", undefined, "Réflexion"));
+    d.append(el("summary", undefined, t("Thinking")));
     d.addEventListener("toggle", () => {
       if (d.open && d.childElementCount === 1) d.append(el("div", "tool-body thinking-body", text));
     });
@@ -532,7 +531,7 @@ export class TranscriptRenderer {
     d.dataset.state = "running";
     const s = el("summary");
     const diff = toolDiff(b.name, b.input);
-    const [toolName, toolSummary] = b.name === SIM_TOOL ? ["Simulateur", simulatorAction(b.input)] : b.name === "Artifact" ? ["Artefact", artifactAction(b.input)] : [b.name.replace(/^mcp__/, "").replace(/__/g, " "), b.summary];
+    const [toolName, toolSummary] = b.name === SIM_TOOL ? [t("Simulator"), simulatorAction(b.input)] : b.name === "Artifact" ? [t("Artifact"), artifactAction(b.input)] : [b.name.replace(/^mcp__/, "").replace(/__/g, " "), b.summary];
     s.append(el("span", "tool-name", toolName), el("code", "tool-sum", toolSummary));
     if (diff) s.append(countsLabel(diff.added, diff.removed));
     s.append(el("span", "tool-meta"));
@@ -547,12 +546,12 @@ export class TranscriptRenderer {
   private fillTool(d: HTMLDetailsElement, tv: ToolView) {
     const body = el("div", "tool-body");
     const diff = toolDiff(tv.name, tv.input);
-    // Question ou plan : ils ont été lus dans leur carte, seul le résultat reste utile ici.
+    // Question or plan: they were read in their card, only the result is still useful here.
     const shown = kindOf(tv.name) === "ask" || kindOf(tv.name) === "plan";
     if (!shown) body.append(diff ? renderLines(diff.lines) : wrapWithCopy(el("pre", "tool-io", tv.input)));
-    // Un diff dit déjà tout : la sortie de l'outil ne s'affiche que s'il a échoué.
+    // A diff already says it all: the tool output only shows if it failed.
     if (tv.result && (!diff || tv.result.isError)) {
-      body.append(wrapWithCopy(el("pre", `tool-io is-out${tv.result.isError ? " is-error" : ""}`, tv.result.text || "(aucune sortie)")));
+      body.append(wrapWithCopy(el("pre", `tool-io is-out${tv.result.isError ? " is-error" : ""}`, tv.result.text || t("(no output)"))));
     }
     const first = !d.querySelector(".tool-body");
     d.querySelector(".tool-body")?.remove();

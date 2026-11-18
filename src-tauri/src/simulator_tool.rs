@@ -1,6 +1,6 @@
-//! L'outil MCP qui laisse Claude piloter un simulateur iOS. Le CLI le voit comme un serveur
-//! « sdk » : ses messages JSON-RPC passent par le canal stream-json déjà ouvert (`mcp_message`),
-//! sans processus de plus par conversation. Chaque appel passe par la permission habituelle du CLI.
+//! The MCP tool that lets Claude drive an iOS simulator. The CLI sees it as an "sdk"
+//! server: its JSON-RPC messages go through the already open stream-json channel (`mcp_message`),
+//! with no extra process per conversation. Each call goes through the CLI's usual permission.
 
 use crate::simulator::{self, SimDevice, Simulator};
 use base64::Engine;
@@ -15,15 +15,15 @@ Actions except list and boot return a screenshot once the screen settles; if it 
 Coordinates are pixels of that screenshot, origin top-left. A swipe starting within 6 px of an edge is the system gesture: \
 bottom = home, left = back, top = notifications or Control Center. Build, install and launch apps with xcodebuild and `xcrun simctl`.";
 
-/// Un geste qui part à moins de ce nombre de pixels d'un bord est un geste du système.
+/// A gesture starting less than this many pixels from an edge is a system gesture.
 const EDGE_PX: f64 = 6.0;
 const TAP: Duration = Duration::from_millis(60);
-/// SimulatorKit ignore deux mouvements à moins de 16 ms.
+/// SimulatorKit ignores two moves less than 16 ms apart.
 const SWIPE_TICK: f64 = 0.02;
-/// Délai laissé à l'écran pour réagir : sur une machine chargée, l'accueil met plus d'une seconde à démarrer.
+/// Time given to the screen to react: on a busy machine, the home screen takes more than a second to start.
 const FIRST_CHANGE: Duration = Duration::from_secs(2);
-/// Une capture demandée alors que Claude a déjà vu l'écran : une app lente à s'ouvrir ne doit pas lui
-/// faire enchaîner des images identiques, ni renoncer avant la fin du lancement.
+/// A screenshot requested when Claude has already seen the screen: an app slow to open must not make it
+/// chain identical images, nor give up before the launch ends.
 const POLL_WAIT: Duration = Duration::from_secs(3);
 
 fn tool() -> Value {
@@ -47,7 +47,7 @@ fn tool() -> Value {
     })
 }
 
-/// Répond à un message JSON-RPC du CLI.
+/// Answers a JSON-RPC message from the CLI.
 pub async fn handle(sim: &Arc<Simulator>, message: &Value) -> Value {
     let id = message["id"].clone();
     let result = match message["method"].as_str() {
@@ -62,9 +62,9 @@ pub async fn handle(sim: &Arc<Simulator>, message: &Value) -> Value {
             Err(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": true }),
         },
         Some("ping") => json!({}),
-        // Une notification n'attend pas de réponse.
+        // A notification expects no answer.
         _ if id.is_null() => return json!({}),
-        _ => return json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Méthode inconnue" } }),
+        _ => return json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Method not found" } }),
     };
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
@@ -74,7 +74,7 @@ fn device_line(device: &SimDevice, selected: Option<&str>) -> String {
     format!("{}: {}, {}, {}{shown}", device.name, device.udid, device.state, device.runtime)
 }
 
-/// L'appareil demandé, sinon celui du panneau, sinon le seul démarré. Jamais un choix au hasard.
+/// The requested device, else the panel's, else the only booted one. Never a random pick.
 fn resolve(devices: &[SimDevice], wanted: Option<&str>, selected: Option<&str>) -> Result<SimDevice, String> {
     let booted = |d: &SimDevice| d.state == "Booted";
     if let Some(wanted) = wanted {
@@ -97,7 +97,7 @@ fn resolve(devices: &[SimDevice], wanted: Option<&str>, selected: Option<&str>) 
     }
 }
 
-/// `x`, `y` lus dans les arguments et vérifiés contre la taille de la capture.
+/// `x`, `y` read from the arguments and checked against the screenshot size.
 fn point(args: &Value, keys: (&str, &str), size: (f64, f64)) -> Result<(f64, f64), String> {
     let (Some(x), Some(y)) = (args[keys.0].as_f64(), args[keys.1].as_f64()) else {
         return Err(format!("{} and {} are required.", keys.0, keys.1));
@@ -108,7 +108,7 @@ fn point(args: &Value, keys: (&str, &str), size: (f64, f64)) -> Result<(f64, f64
     Ok((x, y))
 }
 
-/// 1 haut, 2 gauche, 3 bas, 4 droite, 0 si le geste ne part pas d'un bord.
+/// 1 top, 2 left, 3 bottom, 4 right, 0 if the gesture does not start from an edge.
 fn edge_of(x: f64, y: f64, size: (f64, f64)) -> u8 {
     if size.1 - y <= EDGE_PX {
         3
@@ -141,10 +141,10 @@ fn key_code(name: &str) -> Option<u32> {
 const COMMAND_KEY: u32 = 227;
 const SHIFT_KEY: u32 = 225;
 const V_KEY: u32 = 25;
-/// Au-delà, frapper touche par touche serait trop long : on colle.
+/// Beyond this, typing key by key would take too long: paste instead.
 const TYPE_MAX: usize = 300;
 
-/// Disposition du clavier de l'appareil : un code HID désigne une position, pas un caractère.
+/// The device's keyboard layout: a HID code names a position, not a character.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Layout {
     Qwerty,
@@ -155,7 +155,7 @@ const QWERTY_KEYS: &[(u32, char, char)] = &[
     (30, '1', '!'), (31, '2', '@'), (32, '3', '#'), (33, '4', '$'), (34, '5', '%'), (35, '6', '^'), (36, '7', '&'), (37, '8', '*'), (38, '9', '('), (39, '0', ')'),
     (45, '-', '_'), (46, '=', '+'), (47, '[', '{'), (48, ']', '}'), (49, '\\', '|'), (51, ';', ':'), (52, '\'', '"'), (53, '`', '~'), (54, ',', '<'), (55, '.', '>'), (56, '/', '?'),
 ];
-/// Relevée sur un simulateur en français. Les codes 53 et 100 y sont inversés par rapport à un clavier physique.
+/// Observed on a simulator set to French. Codes 53 and 100 are swapped there compared with a physical keyboard.
 const AZERTY_KEYS: &[(u32, char, char)] = &[
     (53, '<', '>'), (100, '@', '#'), (30, '&', '1'), (31, 'é', '2'), (32, '"', '3'), (33, '\'', '4'), (34, '(', '5'), (35, '§', '6'), (36, 'è', '7'), (37, '!', '8'), (38, 'ç', '9'), (39, 'à', '0'),
     (45, ')', '°'), (46, '-', '_'), (48, '$', '*'), (52, 'ù', '%'), (16, ',', '?'), (54, ';', '.'), (55, ':', '/'), (56, '=', '+'),
@@ -166,7 +166,7 @@ const AZERTY_LETTERS: &[(char, u32)] = &[
 ];
 const AZERTY_DEAD_KEY: u32 = 47;
 
-/// Les touches qui écrivent ce caractère : `None` s'il n'y en a pas sur cette disposition.
+/// The keys that type this character: `None` if there are none on this layout.
 fn strokes_for(c: char, layout: Layout) -> Option<Vec<(u32, bool)>> {
     match c {
         ' ' => return Some(vec![(44, false)]),
@@ -186,7 +186,7 @@ fn strokes_for(c: char, layout: Layout) -> Option<Vec<(u32, bool)>> {
         return Some(vec![(*code, *plain != c)]);
     }
     if layout == Layout::Azerty {
-        // Touche morte : ^ ou ¨, puis la voyelle.
+        // Dead key: ^ or ¨, then the vowel.
         let (shift, vowel) = match c {
             'â' => (false, 'a'),
             'ê' => (false, 'e'),
@@ -216,7 +216,7 @@ fn strokes(text: &str, layout: Layout) -> Option<Vec<(u32, bool)>> {
     Some(all)
 }
 
-/// La disposition d'après les réglages de l'appareil, seulement si on la connaît avec certitude.
+/// The layout from the device settings, only when it is known for sure.
 pub fn layout_from(keyboards: Option<&str>, languages: Option<&str>) -> Option<Layout> {
     let first_quoted = |text: &str| text.lines().map(|l| l.trim().trim_matches(|c: char| c == '"' || c == ',' || c == '(' || c == ')').to_string()).find(|l| !l.is_empty());
     if let Some(keyboard) = keyboards.and_then(first_quoted) {
@@ -252,7 +252,7 @@ async fn run(sim: &Arc<Simulator>, args: &Value) -> Result<Value, String> {
         return Err(format!("{} is {}. Use the boot action first.", device.name, device.state.to_lowercase()));
     }
 
-    // Un collage parti avant que le toucher ait donné le focus déclenche une alerte d'iOS.
+    // A paste sent before the tap has given focus triggers an iOS alert.
     let _turn = sim.agent_turn.lock().await;
     sim.agent_attach(&device.udid).await?;
     let size = sim.image_size().ok_or("The screen is not available yet.")?;
@@ -306,8 +306,8 @@ async fn run(sim: &Arc<Simulator>, args: &Value) -> Result<Value, String> {
                     }
                 }
                 None => {
-                    // Disposition inconnue, caractère absent ou texte long : le presse-papiers accepte tout,
-                    // mais iOS demande alors la permission de coller.
+                    // Unknown layout, missing character or long text: the clipboard accepts anything,
+                    // but iOS then asks for permission to paste.
                     simulator::copy_to_device(&device.udid, text).await?;
                     sim.send_line(format!("key down {COMMAND_KEY}"));
                     tokio::time::sleep(Duration::from_millis(30)).await;
@@ -342,7 +342,7 @@ async fn run(sim: &Arc<Simulator>, args: &Value) -> Result<Value, String> {
     let frame = sim.settled(before, first_change).await.ok_or("The screen is not available yet.")?;
     sim.agent_saw_latest();
     let data = base64::engine::general_purpose::STANDARD.encode(frame.as_slice());
-    // Sans cette précision, une capture trop tôt se lit comme une action sans effet.
+    // Without this note, a screenshot taken too early reads as an action with no effect.
     let unchanged = if !first_change.is_zero() && sim.frame_count() == before { " Nothing has changed on screen yet: it may still be reacting, take another screenshot before concluding." } else { "" };
     Ok(json!([
         { "type": "text", "text": format!("{}, screen {}x{}.{note}{unchanged}", device.name, size.0, size.1) },
@@ -359,29 +359,29 @@ mod tests {
     }
 
     #[test]
-    fn plusieurs_appareils_demarres_sans_choix_est_une_erreur() {
+    fn several_booted_devices_without_choice_is_an_error() {
         let list = [device("a", "iPhone A", "Booted"), device("b", "iPhone B", "Booted")];
         let message = resolve(&list, None, None).unwrap_err();
         assert!(message.contains("iPhone A") && message.contains("iPhone B"));
     }
 
     #[test]
-    fn le_panneau_decide_si_son_appareil_est_demarre() {
+    fn panel_decides_if_its_device_is_booted() {
         let list = [device("a", "iPhone A", "Booted"), device("b", "iPhone B", "Booted"), device("c", "iPhone C", "Shutdown")];
         assert_eq!(resolve(&list, None, Some("b")).unwrap().udid, "b");
-        // Éteint : on ne se rabat pas sur un autre sans le dire.
+        // Shut down: do not silently fall back on another one.
         assert!(resolve(&list, None, Some("c")).is_err());
     }
 
     #[test]
-    fn le_seul_demarre_sert_par_defaut() {
+    fn only_booted_device_is_the_default() {
         let list = [device("a", "iPhone A", "Shutdown"), device("b", "iPhone B", "Booted")];
         assert_eq!(resolve(&list, None, None).unwrap().udid, "b");
         assert!(resolve(&list[..1], None, None).is_err());
     }
 
     #[test]
-    fn un_nom_prefere_l_appareil_demarre() {
+    fn a_name_prefers_the_booted_device() {
         let list = [device("a", "iPhone 17e", "Shutdown"), device("b", "iphone 17E", "Booted")];
         assert_eq!(resolve(&list, Some("iPhone 17e"), None).unwrap().udid, "b");
         assert_eq!(resolve(&list, Some("a"), None).unwrap().udid, "a");
@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn un_geste_part_d_un_bord_seulement_tout_pres() {
+    fn a_gesture_starts_from_an_edge_only_very_close() {
         let size = (585.0, 1266.0);
         assert_eq!(edge_of(290.0, 1264.0, size), 3);
         assert_eq!(edge_of(2.0, 600.0, size), 2);
@@ -399,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn un_point_hors_de_la_capture_est_refuse() {
+    fn a_point_outside_the_screenshot_is_refused() {
         let size = (585.0, 1266.0);
         assert_eq!(point(&json!({ "x": 10, "y": 20 }), ("x", "y"), size), Ok((10.0, 20.0)));
         assert!(point(&json!({ "x": 900, "y": 20 }), ("x", "y"), size).is_err());
@@ -407,10 +407,10 @@ mod tests {
     }
 
     #[test]
-    fn la_frappe_suit_la_disposition() {
+    fn typing_follows_the_layout() {
         assert_eq!(strokes("aA", Layout::Azerty), Some(vec![(20, false), (20, true)]));
         assert_eq!(strokes("aA", Layout::Qwerty), Some(vec![(4, false), (4, true)]));
-        // Sur AZERTY, les chiffres demandent Maj.
+        // On AZERTY, digits need Shift.
         assert_eq!(strokes("1", Layout::Azerty), Some(vec![(30, true)]));
         assert_eq!(strokes("1", Layout::Qwerty), Some(vec![(30, false)]));
         assert_eq!(strokes("@", Layout::Azerty), Some(vec![(100, false)]));
@@ -419,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn sans_touche_on_colle() {
+    fn without_a_key_it_pastes() {
         assert_eq!(strokes("é", Layout::Qwerty), None);
         assert_eq!(strokes("✓", Layout::Azerty), None);
         assert_eq!(strokes("É", Layout::Azerty), None);
@@ -427,11 +427,11 @@ mod tests {
     }
 
     #[test]
-    fn disposition_lue_dans_les_reglages() {
+    fn layout_read_from_settings() {
         let languages = "(\n    \"fr-FR\"\n)";
         assert_eq!(layout_from(None, Some(languages)), Some(Layout::Azerty));
         assert_eq!(layout_from(None, Some("(\n    \"en-US\"\n)")), Some(Layout::Qwerty));
-        // Le britannique place @ et " ailleurs : mieux vaut coller que se tromper.
+        // The British layout puts @ and " elsewhere: better to paste than to get it wrong.
         assert_eq!(layout_from(None, Some("(\n    \"en-GB\"\n)")), None);
         assert_eq!(layout_from(Some("(\n    \"de_DE@sw=QWERTZ;hw=Automatic\"\n)"), Some(languages)), None);
         assert_eq!(layout_from(Some("(\n    \"en_US@sw=QWERTY;hw=Automatic\"\n)"), Some(languages)), Some(Layout::Qwerty));
@@ -439,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn touches_connues() {
+    fn known_keys() {
         assert_eq!(key_code("Return"), Some(40));
         assert_eq!(key_code("up"), Some(82));
         assert_eq!(key_code("f13"), None);

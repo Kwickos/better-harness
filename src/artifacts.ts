@@ -1,8 +1,9 @@
-// Onglet Artefacts : les pages publiées par Claude dans cette conversation.
-// Une page dont le fichier est encore là s'affiche sans session claude.ai, dans une vue native placée
-// par le cœur Rust ; le reste s'ouvre sur claude.ai.
+// Artifacts tab: the pages Claude published in this conversation.
+// A page whose file is still here shows without a claude.ai session, in a native view placed
+// by the Rust core; the rest opens on claude.ai.
 import type { Api, Artifact } from "./api";
 import { copyButton } from "./copy";
+import { t } from "./i18n";
 import { icon } from "./icons";
 import { confirmMenu, showMenu } from "./menu";
 
@@ -11,17 +12,17 @@ interface Deps {
   inTauri: boolean;
   guard: <T>(p: Promise<T>) => Promise<T | undefined>;
   openExternal: (url: string) => void;
-  /** Les artefacts de la conversation affichée, le plus récent d'abord. */
+  /** Artifacts of the displayed conversation, most recent first. */
   list: () => Artifact[];
-  /** Retire l'artefact de la conversation, une fois supprimé. */
+  /** Removes the artifact from the conversation, once deleted. */
   remove: (url: string) => void;
-  /** La vue native peut-elle être à l'écran (onglet ouvert, pas de menu ni de dialogue devant) ? */
+  /** Can the native view be on screen (tab open, no menu or dialog in front)? */
   canShow: () => boolean;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const GALLERY = "https://claude.ai/code/artifacts";
-/** Une page qui ne signale jamais la fin de son chargement (un script distant bloqué) s'affiche quand même. */
+/** A page that never reports it finished loading (a blocked remote script) shows anyway. */
 const READY_FALLBACK_MS = 1500;
 
 export function initArtifactTab(d: Deps) {
@@ -33,7 +34,7 @@ export function initArtifactTab(d: Deps) {
 
   let visible = false;
   let selected: string | null = null;
-  /** Le fichier chargé dans la vue native. */
+  /** The file loaded in the native view. */
   let loaded: string | null = null;
   let loading = false;
   let readyTimer = 0;
@@ -46,7 +47,7 @@ export function initArtifactTab(d: Deps) {
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   };
 
-  // Masquer est immédiat ; seuls les repositionnements sont regroupés par image.
+  // Hiding is immediate; only repositioning is batched per frame.
   function sync() {
     if (!d.inTauri || !loaded) return;
     if (loading || !d.canShow()) {
@@ -57,7 +58,7 @@ export function initArtifactTab(d: Deps) {
     queued = true;
     requestAnimationFrame(() => {
       queued = false;
-      // Entre-temps, l'artefact affiché a pu changer : `loaded` décide au dernier moment.
+      // The displayed artifact may have changed meanwhile: `loaded` decides at the last moment.
       void d.api.artifactBounds(rect(), !!loaded && !loading && d.canShow());
     });
   }
@@ -110,13 +111,13 @@ export function initArtifactTab(d: Deps) {
         return;
       }
     }
-    // Rien à montrer ici : la vue native libère sa mémoire et laisse le message.
+    // Nothing to show here: the native view frees its memory and leaves the message.
     if (loaded) void d.api.artifactClose();
     loaded = null;
     loading = false;
     reload.hidden = true;
-    if (artifact) showEmpty(artifact.title, artifact.path ? "Le fichier n'est plus sur cet ordinateur." : "", "Ouvrir sur claude.ai", artifact.url);
-    else showEmpty("Aucun artefact", "Les pages que Claude publie apparaîtront ici.", "Tous mes artefacts", GALLERY);
+    if (artifact) showEmpty(artifact.title, artifact.path ? t("The file is no longer on this computer.") : "", t("Open on claude.ai"), artifact.url);
+    else showEmpty(t("No artifacts"), t("Pages Claude publishes will appear here."), t("All my artifacts"), GALLERY);
   }
 
   pick.addEventListener("click", () => {
@@ -132,7 +133,7 @@ export function initArtifactTab(d: Deps) {
             void render();
           },
         })),
-        { label: "Tous mes artefacts", run: () => d.openExternal(GALLERY) },
+        { label: t("All my artifacts"), run: () => d.openExternal(GALLERY) },
       ],
       { minWidth: 200 },
     );
@@ -142,13 +143,13 @@ export function initArtifactTab(d: Deps) {
     const artifact = current();
     if (artifact) d.openExternal(artifact.url);
   });
-  $("art-external").before(copyButton(() => current()?.url ?? "", "Copier le lien", "art-copy"));
+  $("art-external").before(copyButton(() => current()?.url ?? "", t("Copy link"), "art-copy"));
 
   const del = $<HTMLButtonElement>("art-delete");
   del.addEventListener("click", () => {
     const artifact = current();
     if (!artifact) return;
-    confirmMenu(del, `Supprimer « ${artifact.title} » ?`, "Son lien cessera de marcher, définitivement. Le fichier local reste.", "Supprimer", () => void remove(artifact), { align: "end" });
+    confirmMenu(del, t("Delete “{title}”?", { title: artifact.title }), t("Its link will stop working for good. The local file stays."), t("Delete"), () => void remove(artifact), { align: "end" });
   });
 
   async function remove(artifact: Artifact) {
@@ -168,7 +169,7 @@ export function initArtifactTab(d: Deps) {
       visible = next;
       void render();
     },
-    /** La conversation ou sa liste a changé. */
+    /** The conversation or its list changed. */
     refresh() {
       void render();
     },

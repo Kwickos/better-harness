@@ -1,6 +1,6 @@
-// Rendu Markdown, y compris en direct pendant le streaming.
-// Le texte vient du modèle et peut contenir du HTML issu de résultats d'outils :
-// tout passe par DOMPurify, et la CSP bloque scripts et images distantes.
+// Markdown rendering, including live while streaming.
+// The text comes from the model and can contain HTML from tool results:
+// everything goes through DOMPurify, and the CSP blocks scripts and remote images.
 import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { decorateCode } from "./copy";
@@ -17,10 +17,10 @@ export function renderMarkdown(text: string): string {
 }
 
 /**
- * Markdown en direct, à coût constant par mise à jour : les blocs terminés
- * (paragraphe, titre, tableau, bloc de code fermé…) sont rendus une seule fois
- * puis figés ; seul le dernier bloc, encore en cours d'écriture, est re-rendu.
- * Le coût ne dépend donc pas de la longueur totale du message.
+ * Live Markdown, at a constant cost per update: finished blocks
+ * (paragraph, heading, table, closed code block…) are rendered once
+ * and then frozen; only the last block, still being written, is re-rendered.
+ * So the cost doesn't depend on the total length of the message.
  */
 export class LiveMarkdown {
   private text = "";
@@ -46,7 +46,7 @@ export class LiveMarkdown {
   private update() {
     const rest = this.text.slice(this.committed);
     const tokens = md.lexer(rest);
-    // Un bloc est terminé dès qu'un autre bloc non vide le suit.
+    // A block is finished as soon as another non-empty block follows it.
     let lastBlock = -1;
     for (let i = tokens.length - 1; i >= 0; i--) {
       if (tokens[i].type !== "space") {
@@ -55,7 +55,7 @@ export class LiveMarkdown {
       }
     }
     const done = lastBlock > 0 ? tokens.slice(0, lastBlock).map((t) => t.raw).join("") : "";
-    // Garde-fou : on ne fige que si les tokens recouvrent exactement le texte source.
+    // Safeguard: only freeze if the tokens cover the source text exactly.
     if (done && rest.startsWith(done)) {
       if (done.trim()) {
         const block = document.createElement("div");
@@ -71,7 +71,7 @@ export class LiveMarkdown {
   }
 }
 
-/** Un bloc de code encore ouvert est rendu comme s'il était fermé (pas de saut visuel). */
+/** A code block still open is rendered as if it were closed (no visual jump). */
 function closeOpenFence(text: string): string {
   const fences = text.match(/^ {0,3}(```|~~~)/gm);
   return fences && fences.length % 2 === 1 ? `${text}\n${fences[fences.length - 1].trim()}` : text;

@@ -1,3 +1,4 @@
+import { fmtMb, fmtNumber, lang, setLang, t, tp, translateDom } from "./i18n";
 import "./errors";
 import { tauriApi, type UpdateState, type UsageWindows, type Api, type ContextUsage, type HistoryEntry, type PermissionEv, type ProcStat, type SessionInfo, type Settings, type UiEvent } from "./api";
 import { icon, type IconName } from "./icons";
@@ -15,7 +16,7 @@ import { initWorld } from "./world";
 import { initAttachments } from "./attachments";
 import { SessionView, TranscriptRenderer, el, type BlockView, type Item, type ToolView } from "./transcript";
 
-// Hors de Tauri (navigateur), un backend simulé permet de travailler l'interface.
+// Outside Tauri (in a browser), a mock backend lets you work on the UI.
 const inTauri = "__TAURI_INTERNALS__" in window;
 const api: Api = inTauri ? tauriApi : (await import("./mock")).mockApi;
 
@@ -32,9 +33,9 @@ let active: string | null = null;
 let settings: Settings;
 let history: HistoryEntry[] = [];
 let appHome = "";
-/** Dossier des conversations lancées sans projet. */
+/** Folder for conversations started without a project. */
 let scratchDir = "";
-/** Conversation pas encore créée : elle naît au premier message envoyé. `cwd` vide : sans dossier. */
+/** Conversation not created yet: it is born with the first message sent. Empty `cwd`: no folder. */
 const draft: { cwd: string; model: string | null; mode: string; effort: string | null; advisor: string | null } = { cwd: "", model: null, mode: "default", effort: null, advisor: null };
 
 const renderer = new TranscriptRenderer(
@@ -58,19 +59,17 @@ const attachmentsUi = initAttachments({ api, guard, reveal, overlayChanged: () =
 
 const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const home = (p: string) => (appHome && p.startsWith(appHome) ? `~${p.slice(appHome.length)}` : p);
-const NO_FOLDER = "Sans dossier";
+const NO_FOLDER = t("No folder");
 const projectName = (cwd: string) => (cwd === scratchDir ? NO_FOLDER : base(cwd));
-const nf = new Intl.NumberFormat("fr-FR");
-const fmtMb = (mb: number) => (mb >= 1024 ? `${(mb / 1024).toFixed(1).replace(".", ",")} Go` : `${Math.round(mb)} Mo`);
 
 let toastTimer = 0;
 function toast(text: string) {
-  const t = $("toast");
-  t.textContent = text;
-  t.classList.remove("is-leaving");
-  t.hidden = false;
+  const box = $("toast");
+  box.textContent = text;
+  box.classList.remove("is-leaving");
+  box.hidden = false;
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => animateOut(t, "is-leaving", () => (t.hidden = true)), 4000);
+  toastTimer = window.setTimeout(() => animateOut(box, "is-leaving", () => (box.hidden = true)), 4000);
 }
 
 async function guard<T>(p: Promise<T>): Promise<T | undefined> {
@@ -121,7 +120,7 @@ function removeArtifact(url: string) {
 }
 
 const panel = initPanel({ api, inTauri, cwd: currentCwd, sid: () => active, guard, openExternal, reveal, attach: (path) => composer.attach(path), artifacts: () => activeView()?.artifacts ?? [], removeArtifact });
-// Monde pixel art : une créature par Claude de la conversation (mode Pixel art seulement).
+// Pixel art world: one creature per Claude in the conversation (Pixel art mode only).
 const world = initWorld({
   active: () => active,
   modelOf: (sid) => {
@@ -151,7 +150,7 @@ async function openSettings() {
   panel.syncBrowser();
 }
 
-// ---------------------------------------------------------------- fondus de bord de liste
+// ---------------------------------------------------------------- list edge fades
 
 function watchFade(node: HTMLElement) {
   const update = () => {
@@ -165,7 +164,7 @@ function watchFade(node: HTMLElement) {
 }
 for (const n of document.querySelectorAll<HTMLElement>(".fade-y")) watchFade(n);
 
-// ---------------------------------------------------------------- barre latérale
+// ---------------------------------------------------------------- sidebar
 
 interface Thread {
   title: string;
@@ -187,21 +186,21 @@ function saveJson(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Préférence d'affichage : tant pis si elle n'est pas gardée.
+    // Display preference: no harm if it isn't kept.
   }
 }
 
 const expanded = new Set<string>();
 const collapsed = new Set<string>(readJson<string[]>("bh.projects.collapsed", []));
 let projectOrder = readJson<string[]>("bh.projects.order", []);
-/** Pendant un glisser-déposer, la liste ne doit pas être reconstruite sous le pointeur. */
+/** During a drag, the list must not be rebuilt under the pointer. */
 let reordering = false;
 let justDragged = false;
-/** Conversations en cours d'archivage ou de suppression : elles quittent la liste tout de suite. */
+/** Conversations being archived or deleted: they leave the list right away. */
 const removing = new Set<string>();
 let sidebarQueued = false;
 let sidebarKey = "";
-/** La conversation dont le fil d'Ariane affiche le titre : un titre qui change s'y fond. */
+/** The conversation whose title the breadcrumb shows: a title that changes fades in there. */
 let crumbSid: string | null = null;
 const query = () => ($("search") as HTMLInputElement).value.trim().toLowerCase();
 
@@ -228,10 +227,10 @@ function renderSidebar() {
 }
 
 function drawSidebar() {
-  // Ne pas remplacer une ligne dont le menu est ouvert : il perdrait son ancre.
+  // Don't replace a row whose menu is open: the menu would lose its anchor.
   if (menuElement() || reordering) return;
   const list = threads();
-  // `collapsed` n'y figure pas : replier agit sur la ligne en place, pour que l'animation se joue.
+  // `collapsed` is left out: folding acts on the row in place, so the animation plays.
   const key = JSON.stringify([active, [...expanded], projectOrder, query(), list.map((t) => [t.sid ?? t.hist?.cliId, t.title, t.activity, t.cwd])]);
   if (key === sidebarKey) return;
   sidebarKey = key;
@@ -243,7 +242,7 @@ function drawSidebar() {
   }
   const nav = $("threads");
   if (groups.size === 0) {
-    nav.replaceChildren(el("div", "side-empty", query() ? "Aucun résultat." : "Aucune conversation."));
+    nav.replaceChildren(el("div", "side-empty", query() ? t("No results.") : t("No conversations.")));
     return;
   }
   const q = query();
@@ -251,14 +250,14 @@ function drawSidebar() {
   const queryChanged = q !== lastSidebarQuery;
   lastSidebarQuery = q;
   nav.replaceChildren(...orderedGroups(groups).map(([cwd, items]) => projectSection(cwd, items, q)));
-  // Seul un titre qui déborde s'estompe au repos : un titre qui tient juste reste net.
+  // Only a title that overflows fades out at rest: a title that just fits stays sharp.
   for (const title of nav.querySelectorAll<HTMLElement>(".thread-title")) title.classList.toggle("is-long", title.scrollWidth > title.clientWidth);
   if (skipSidebarMotion || queryChanged || !motionLive()) skipSidebarMotion = false;
   else animateSidebar(nav, before);
 }
 
 let lastSidebarQuery = "";
-/** Après un glisser-déposer, tout est déjà à sa place : pas de seconde animation. */
+/** After a drag, everything is already in place: no second animation. */
 let skipSidebarMotion = false;
 
 interface Spot {
@@ -275,7 +274,7 @@ function snapshotSidebar(nav: HTMLElement): Map<string, Spot> {
   return spots;
 }
 
-/** Les lignes qui changent de place glissent, les nouvelles apparaissent, celles qui partent s'estompent. */
+/** Rows that move slide, new ones appear, leaving ones fade out. */
 function animateSidebar(nav: HTMLElement, before: Map<string, Spot>) {
   const origin = nav.getBoundingClientRect().top - nav.scrollTop;
   const seen = new Set<string>();
@@ -292,10 +291,10 @@ function animateSidebar(nav: HTMLElement, before: Map<string, Spot>) {
       const rowKey = row.dataset.key!;
       seen.add(rowKey);
       const was = before.get(rowKey);
-      // La ligne suit déjà son projet : seul l'écart propre à la ligne s'anime.
+      // The row already follows its project: only its own offset animates.
       if (was) {
         flipY(row, was.top - (row.getBoundingClientRect().top - origin) - moved);
-        // Le titre généré remplace le début du message : il se fond sans à-coup.
+        // The generated title replaces the start of the message: it fades in smoothly.
         const title = row.querySelector<HTMLElement>(".thread-title");
         if (title && was.node.querySelector(".thread-title")?.textContent !== title.textContent) textIn(title);
       } else if (old) void enter(row, { opacity: "0" }, { duration: DUR.fast });
@@ -303,7 +302,7 @@ function animateSidebar(nav: HTMLElement, before: Map<string, Spot>) {
   }
   for (const [key, spot] of before) {
     if (seen.has(key) || !spot.node.classList.contains("thread")) continue;
-    // Conversation archivée ou supprimée : son fantôme s'efface à l'ancienne place.
+    // Archived or deleted conversation: its ghost fades out at the old spot.
     const ghost = spot.node.cloneNode(true) as HTMLElement;
     ghost.classList.add("thread-ghost");
     ghost.style.top = `${spot.top}px`;
@@ -312,7 +311,7 @@ function animateSidebar(nav: HTMLElement, before: Map<string, Spot>) {
   }
 }
 
-/** Les projets déjà rangés gardent leur place ; un nouveau projet arrive en tête. */
+/** Projects already ordered keep their place; a new project comes first. */
 function orderedGroups(groups: Map<string, Thread[]>): [string, Thread[]][] {
   const rank = new Map(projectOrder.map((cwd, i) => [cwd, i]));
   const all = [...groups];
@@ -334,7 +333,7 @@ function projectSection(cwd: string, items: Thread[], q: string): HTMLElement {
   const chev = el("span", "group-chev");
   chev.innerHTML = icon("chevronRight");
   head.append(el("span", "group-name", projectName(cwd)), chev);
-  // Replié, un projet garde le signal de ses conversations : il ne faut pas rater une demande d'accord.
+  // Folded, a project still shows its conversations' state: an approval request must not be missed.
   const activity = items.some((t) => t.activity === "wait") ? "wait" : items.some((t) => t.activity === "busy") ? "busy" : "";
   if (activity) {
     const st = el("span", `thread-state group-state is-${activity}`);
@@ -343,7 +342,7 @@ function projectSection(cwd: string, items: Thread[], q: string): HTMLElement {
   }
   const add = el("button", "icon-btn");
   add.type = "button";
-  add.title = `Nouvelle conversation dans ${projectName(cwd)}`;
+  add.title = t("New conversation in {name}", { name: projectName(cwd) });
   add.setAttribute("aria-label", add.title);
   add.innerHTML = icon("plus");
   add.addEventListener("click", (e) => {
@@ -374,7 +373,7 @@ function projectSection(cwd: string, items: Thread[], q: string): HTMLElement {
   for (const t of items.slice(0, limit)) ul.append(threadRow(t));
   inner.append(ul);
   if (items.length > limit) {
-    const more = el("button", "group-more", `${items.length - limit} de plus`);
+    const more = el("button", "group-more", t("{n} more", { n: items.length - limit }));
     more.type = "button";
     more.addEventListener("click", () => {
       expanded.add(cwd);
@@ -400,12 +399,12 @@ function toggleProject(sec: HTMLElement, cwd: string) {
     fold.classList.toggle("is-closed", folded);
     fold.inert = folded;
   }
-  // Le fondu de bas de liste dépend de la hauteur finale.
+  // The bottom fade depends on the final height.
   window.setTimeout(() => $("threads").dispatchEvent(new Event("scroll")), 300);
 }
 
 function saveProjectOrder(visible: string[]) {
-  // Les projets hors de la liste actuelle gardent leur rang relatif, à la suite.
+  // Projects outside the current list keep their relative order, after the others.
   projectOrder = [...visible, ...projectOrder.filter((cwd) => !visible.includes(cwd))];
   saveJson("bh.projects.order", projectOrder);
   renderSidebar();
@@ -427,7 +426,7 @@ const DRAG_THRESHOLD = 4;
 const GROUP_GAP = 12;
 const EDGE = 28;
 
-/** Glisser un projet par son en-tête. Fait au pointeur : Tauri intercepte le glisser-déposer HTML. */
+/** Drags a project by its header. Done with pointer events: Tauri intercepts HTML drag and drop. */
 function startProjectDrag(down: PointerEvent, sec: HTMLElement) {
   if (down.button !== 0 || query() || (down.target as HTMLElement).closest("button")) return;
   const nav = $("threads");
@@ -456,7 +455,7 @@ function startProjectDrag(down: PointerEvent, sec: HTMLElement) {
       s.style.transform = moved ? `translateY(${moved}px)` : "";
     });
   };
-  // Défilement près des bords, pour atteindre les projets hors de vue.
+  // Scrolls near the edges, to reach projects out of view.
   const autoScroll = () => {
     const r = nav.getBoundingClientRect();
     const speed = lastY < r.top + EDGE ? -6 : lastY > r.bottom - EDGE ? 6 : 0;
@@ -532,7 +531,7 @@ function startProjectDrag(down: PointerEvent, sec: HTMLElement) {
       finish(false);
     }
   };
-  // Sur le document : un geste rapide peut quitter l'en-tête dès le premier mouvement.
+  // On the document: a fast gesture can leave the header on its first move.
   document.addEventListener("pointermove", move);
   document.addEventListener("pointerup", up);
   document.addEventListener("pointercancel", cancel);
@@ -543,38 +542,38 @@ onMenuChange(() => {
   if (!menuElement()) renderSidebar();
 });
 
-function threadRow(t: Thread): HTMLElement {
+function threadRow(thread: Thread): HTMLElement {
   const li = el("li", "thread");
-  li.dataset.key = t.hist?.cliId ?? (t.sid ? (views.get(t.sid)?.info.cliId ?? t.sid) : t.title);
-  li.setAttribute("aria-current", String(!!t.sid && t.sid === active));
-  // Calculée au survol : la mémoire ne doit pas obliger à reconstruire la liste.
+  li.dataset.key = thread.hist?.cliId ?? (thread.sid ? (views.get(thread.sid)?.info.cliId ?? thread.sid) : thread.title);
+  li.setAttribute("aria-current", String(!!thread.sid && thread.sid === active));
+  // Computed on hover: memory use must not force a list rebuild.
   li.addEventListener("mouseenter", () => {
-    const m = t.sid ? rss.get(t.sid) : undefined;
-    li.title = `${t.title}\n${home(t.cwd)}${m ? `\n${fmtMb(m.rssMb)} en mémoire` : ""}`;
+    const m = thread.sid ? rss.get(thread.sid) : undefined;
+    li.title = `${thread.title}\n${home(thread.cwd)}${m ? `\n${t("{size} in memory", { size: fmtMb(m.rssMb) })}` : ""}`;
   });
-  li.append(el("span", "thread-title", t.title));
-  if (t.activity) {
-    const st = el("span", `thread-state is-${t.activity}`);
-    st.title = t.activity === "wait" ? "Attend ton accord" : "En cours";
-    st.innerHTML = icon(t.activity === "wait" ? "hand" : "spinner", 14);
+  li.append(el("span", "thread-title", thread.title));
+  if (thread.activity) {
+    const st = el("span", `thread-state is-${thread.activity}`);
+    st.title = thread.activity === "wait" ? t("Waiting for your approval") : t("In progress");
+    st.innerHTML = icon(thread.activity === "wait" ? "hand" : "spinner", 14);
     li.append(st);
   }
   const more = el("button", "icon-btn thread-more");
   more.type = "button";
-  more.setAttribute("aria-label", `Actions pour ${t.title}`);
+  more.setAttribute("aria-label", t("Actions for {title}", { title: thread.title }));
   more.innerHTML = icon("more");
   more.addEventListener("click", (e) => {
     e.stopPropagation();
-    threadMenu(t, more);
+    threadMenu(thread, more);
   });
   li.append(more);
   li.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    threadMenu(t, more);
+    threadMenu(thread, more);
   });
   li.addEventListener("click", () => {
-    if (t.sid) void activate(t.sid);
-    else if (t.hist) void openHistory(t.hist);
+    if (thread.sid) void activate(thread.sid);
+    else if (thread.hist) void openHistory(thread.hist);
   });
   return li;
 }
@@ -588,13 +587,13 @@ async function removeConversation(cliId: string, action: () => Promise<void>) {
   renderSidebar();
 }
 
-function threadMenu(t: Thread, anchor: HTMLElement) {
-  const v = t.sid ? views.get(t.sid) : undefined;
-  const cliId = t.hist?.cliId ?? v?.info.cliId;
+function threadMenu(thread: Thread, anchor: HTMLElement) {
+  const v = thread.sid ? views.get(thread.sid) : undefined;
+  const cliId = thread.hist?.cliId ?? v?.info.cliId;
   const opts = { minWidth: 170 };
-  // Conversation jamais lancée : rien sur le disque, il n'y a qu'à la fermer.
+  // Conversation never started: nothing on disk, it only needs closing.
   if (!cliId) {
-    showMenu(anchor, [{ label: "Fermer", icon: "close", run: () => void guard(api.close(t.sid!)) }], opts);
+    showMenu(anchor, [{ label: t("Close"), icon: "close", run: () => void guard(api.close(thread.sid!)) }], opts);
     return;
   }
   const archive = () => void removeConversation(cliId, () => api.setArchived(cliId, true));
@@ -603,14 +602,14 @@ function threadMenu(t: Thread, anchor: HTMLElement) {
   showMenu(
     anchor,
     [
-      { label: "Archiver", icon: "archive", run: () => (busy ? confirmMenu(anchor, "Claude est en train de répondre", "Archiver arrête sa réponse.", "Archiver", archive) : archive()) },
-      { label: "Supprimer", icon: "trash", danger: true, run: () => confirmMenu(anchor, "Supprimer cette conversation ?", DELETE_NOTE, "Supprimer", remove) },
+      { label: t("Archive"), icon: "archive", run: () => (busy ? confirmMenu(anchor, t("Claude is replying"), t("Archiving stops its reply."), t("Archive"), archive) : archive()) },
+      { label: t("Delete"), icon: "trash", danger: true, run: () => confirmMenu(anchor, t("Delete this conversation?"), DELETE_NOTE, t("Delete"), remove) },
     ],
     opts,
   );
 }
 
-/** Le dernier clic l'emporte : une conversation lente à s'ouvrir ne doit pas passer devant. */
+/** The last click wins: a conversation slow to open must not jump ahead. */
 let navigation = 0;
 
 async function openHistory(h: HistoryEntry) {
@@ -643,7 +642,7 @@ $("search").addEventListener("keydown", (e) => {
   }
 });
 
-// ---------------------------------------------------------------- en-tête, composer, état
+// ---------------------------------------------------------------- header, composer, status
 
 function renderMain() {
   const v = activeView();
@@ -664,13 +663,13 @@ function renderMain() {
     crumb.replaceChildren();
     crumbSid = null;
   }
-  composer.setPlaceholder(v ? "Répondre à Claude" : "Que doit faire Claude ?");
+  composer.setPlaceholder(v ? t("Reply to Claude") : t("What should Claude do?"));
   renderComposer();
   renderLimit();
   renderWorking();
 }
 
-/** Icône qui change, ou bouton qui apparaît : l'icône arrive sans à-coup. */
+/** An icon that changes, or a button that appears: the icon comes in smoothly. */
 function setIcon(node: HTMLElement, name: IconName) {
   if (node.dataset.current === name) return;
   const first = !node.dataset.current;
@@ -699,14 +698,14 @@ function renderComposer() {
   $("mode-btn").dataset.mode = mode.id;
   const busy = v?.info.state === "busy";
   const has = composer.text().trim().length > 0;
-  // Pendant une réponse : « stop » ; si on tape, « envoyer » réapparaît pour mettre en file.
+  // During a reply: "stop"; typing brings "send" back, to queue the message.
   setShown($("stop"), busy);
   setShown($("send"), !busy || has);
   ($("send") as HTMLButtonElement).disabled = !has;
   renderContext();
 }
 
-/** Jauge du contexte : anneau discret, détail au clic. */
+/** Context gauge: a discreet ring, details on click. */
 function renderContext() {
   const btn = $("ctx-btn");
   const ctx = active ? contexts.get(active) : undefined;
@@ -715,7 +714,7 @@ function renderContext() {
   const ratio = Math.min(1, ctx.totalTokens / Math.max(1, ctx.maxTokens));
   const c = 2 * Math.PI * 6;
   btn.dataset.level = ratio > 0.9 ? "full" : ratio > 0.7 ? "high" : "ok";
-  btn.title = `Contexte : ${Math.round(ratio * 100)} % utilisé`;
+  btn.title = t("Context: {pct}% used", { pct: Math.round(ratio * 100) });
   btn.innerHTML = `<svg class="ctx-ring" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle class="track" cx="8" cy="8" r="6" fill="none" stroke-width="2"/><circle class="used" cx="8" cy="8" r="6" fill="none" stroke-width="2" stroke-linecap="round" stroke-dasharray="${(ratio * c).toFixed(2)} ${c.toFixed(2)}"/></svg>`;
 }
 
@@ -738,7 +737,7 @@ $("ctx-btn").addEventListener("click", (e) => {
   const used = ctx.categories.filter((c) => c.kind === "used" && c.tokens > 0).sort((a, b) => b.tokens - a.tokens);
   const box = el("div");
   const total = el("div", "ctx-total");
-  total.append(el("b", undefined, `${nf.format(ctx.totalTokens)} tokens`), el("span", "soft", ` sur ${nf.format(ctx.maxTokens)} (${pct} %)`));
+  total.append(el("b", undefined, t("{n} tokens", { n: fmtNumber(ctx.totalTokens) })), el("span", "soft", ` ${t("of {max} ({pct}%)", { max: fmtNumber(ctx.maxTokens), pct })}`));
   const bar = el("div", "ctx-bar");
   for (const c of used.slice(0, 5)) {
     const s = el("span");
@@ -748,10 +747,10 @@ $("ctx-btn").addEventListener("click", (e) => {
   box.append(total, bar);
   for (const c of used.slice(0, 6)) {
     const r = el("div", "ctx-row");
-    r.append(el("span", undefined, c.name), el("span", undefined, nf.format(c.tokens)));
+    r.append(el("span", undefined, c.name), el("span", undefined, fmtNumber(c.tokens)));
     box.append(r);
   }
-  const entries: MenuEntry[] = [{ custom: box }, { sep: true }, { label: "Compacter la conversation", hint: "Résume l'historique pour libérer de la place", icon: "sparkle", run: () => sendText("/compact") }];
+  const entries: MenuEntry[] = [{ custom: box }, { sep: true }, { label: t("Compact conversation"), hint: t("Summarizes the history to free up space"), icon: "sparkle", run: () => sendText("/compact") }];
   showMenu(e.currentTarget as HTMLElement, entries, { place: "above", align: "end", minWidth: 260 });
 });
 
@@ -759,7 +758,7 @@ function renderWorking() {
   const v = activeView();
   const show = !!v && v.info.state === "busy" && !renderer.streaming && v.perms.size === 0;
   $("working").hidden = !show;
-  if (show) $("working-label").textContent = v!.stream.thinking ? "Claude réfléchit" : "Claude travaille";
+  if (show) $("working-label").textContent = v!.stream.thinking ? t("Claude is thinking") : t("Claude is working");
 }
 
 function renderLimit() {
@@ -769,23 +768,24 @@ function renderLimit() {
     b.hidden = true;
     return;
   }
-  const when = rl.resetsAt ? fmtReset(rl.resetsAt) : "bientôt";
-  b.textContent = rl.status === "rejected" ? `Limite d'utilisation atteinte, réinitialisation ${when}` : `Limite d'utilisation bientôt atteinte (réinitialisation ${when})`;
+  const when = rl.resetsAt ? fmtReset(rl.resetsAt) : t("soon");
+  b.textContent = rl.status === "rejected" ? t("Usage limit reached, resets {when}", { when }) : t("Usage limit almost reached (resets {when})", { when });
   b.classList.toggle("is-error", rl.status === "rejected");
   b.hidden = false;
 }
 
 function fmtReset(seconds: number) {
   const d = new Date(seconds * 1000);
-  const time = { hour: "2-digit", minute: "2-digit" } as const;
-  return d.toDateString() === new Date().toDateString() ? `à ${d.toLocaleTimeString("fr-FR", time)}` : d.toLocaleString("fr-FR", { weekday: "long", ...time });
+  const time = d.toLocaleTimeString(lang(), { timeStyle: "short" });
+  if (d.toDateString() === new Date().toDateString()) return t("at {time}", { time });
+  return t("{day} at {time}", { day: d.toLocaleDateString(lang(), { weekday: "long" }), time });
 }
 
-// ---------------------------------------------------------------- limite restante
+// ---------------------------------------------------------------- remaining usage
 
-// Lue dans les réponses du modèle (`rate_limit_event`), donc sans requête supplémentaire. Elle vaut pour
-// tout le compte : on garde la dernière connue d'une ouverture à l'autre.
-const USAGE_LABELS: Record<string, string> = { five_hour: "5 heures", seven_day: "Semaine" };
+// Read from the model's responses (`rate_limit_event`), so no extra request. It applies to the
+// whole account: the last known value is kept from one launch to the next.
+const USAGE_LABELS: Record<string, string> = { five_hour: t("5 hours"), seven_day: t("Week") };
 let usage: UsageWindows = {};
 try {
   usage = JSON.parse(localStorage.getItem("bh.usage") ?? "{}") as UsageWindows;
@@ -811,9 +811,9 @@ function renderUsage() {
   window.clearTimeout(usageTimer);
   if (!rows.length) return;
   const left = Math.min(...rows.map((r) => r.left));
-  $("usage-value").textContent = `${left} %`;
+  $("usage-value").textContent = t("{n}%", { n: left });
   btn.dataset.level = left === 0 ? "out" : left <= 10 ? "low" : "ok";
-  // Une fenêtre qui se réinitialise redonne du crédit sans qu'aucun événement n'arrive.
+  // A window that resets gives usage back without any event arriving.
   const next = Math.min(...rows.filter((r) => !r.expired).map((r) => r.resetsAt * 1000));
   if (Number.isFinite(next)) usageTimer = window.setTimeout(renderUsage, Math.min(next - Date.now() + 1000, 2 ** 31 - 1));
 }
@@ -823,23 +823,23 @@ function setUsage(windows: UsageWindows) {
   try {
     localStorage.setItem("bh.usage", JSON.stringify(windows));
   } catch {
-    // Sans stockage, la limite s'affiche quand même jusqu'à la fermeture.
+    // Without storage, the limit still shows until the app closes.
   }
   renderUsage();
 }
 
 $("usage-btn").addEventListener("click", (e) => {
-  const entries: MenuEntry[] = [{ heading: "Limite restante" }];
+  const entries: MenuEntry[] = [{ heading: t("Remaining usage") }];
   for (const r of usageRows()) {
     const row = el("div", "limit-row");
     const top = el("div", "limit-top");
-    top.append(el("b", undefined, r.label), el("span", undefined, `${r.left} % ${r.left > 1 ? "restants" : "restant"}`));
+    top.append(el("b", undefined, r.label), el("span", undefined, tp(r.left, "{n}% left", "{n}% left")));
     const bar = el("div", "ctx-bar");
     const fill = el("span");
     fill.style.width = `${r.left}%`;
     bar.append(fill);
     row.append(top, bar);
-    if (!r.expired) row.append(el("small", undefined, `Réinitialisation ${fmtReset(r.resetsAt)}`));
+    if (!r.expired) row.append(el("small", undefined, t("Resets {when}", { when: fmtReset(r.resetsAt) })));
     entries.push({ custom: row });
   }
   showMenu(e.currentTarget as HTMLElement, entries, { place: "above", align: "end", minWidth: 240 });
@@ -847,14 +847,14 @@ $("usage-btn").addEventListener("click", (e) => {
 
 renderUsage();
 
-// ---------------------------------------------------------------- mises à jour
+// ---------------------------------------------------------------- updates
 
 let updateState: UpdateState = { state: "idle" };
 function renderUpdate(s: UpdateState) {
   updateState = s;
   const btn = $("update-btn");
   btn.hidden = s.state !== "ready";
-  if (s.state === "ready") btn.title = `Better Harness ${s.version} est téléchargée`;
+  if (s.state === "ready") btn.title = t("Better Harness {version} downloaded", { version: s.version });
 }
 $("update-btn").addEventListener("click", (e) => {
   if (updateState.state !== "ready") return;
@@ -863,8 +863,8 @@ $("update-btn").addEventListener("click", (e) => {
     e.currentTarget as HTMLElement,
     [
       { heading: `Better Harness ${updateState.version}` },
-      { note: busy ? "Les réponses en cours s'arrêtent. Les conversations reprennent après le redémarrage." : "L'app redémarre, les conversations restent." },
-      { label: "Redémarrer", icon: "update", run: () => void guard(api.updateInstall()) },
+      { note: busy ? t("Replies in progress stop. Conversations resume after the restart.") : t("The app restarts, conversations stay.") },
+      { label: t("Restart"), icon: "update", run: () => void guard(api.updateInstall()) },
     ],
     { place: "above", minWidth: 250 },
   );
@@ -872,9 +872,9 @@ $("update-btn").addEventListener("click", (e) => {
 void api.onUpdate(renderUpdate);
 void api.updateStatus().then(renderUpdate, () => undefined);
 
-// ---------------------------------------------------------------- menus du composer et de l'en-tête
+// ---------------------------------------------------------------- composer and header menus
 
-/** Modèle et effort que le CLI appliquera dans ce dossier si on ne lui impose rien. */
+/** Model and effort the CLI will apply in this folder if nothing is forced on it. */
 async function refreshCliDefaults() {
   const d = await api.cliDefaults(currentCwd() || null).catch(() => null);
   if (d) {
@@ -883,7 +883,7 @@ async function refreshCliDefaults() {
   }
 }
 
-// Un choix dans le composer ne vaut que pour cette conversation : les défauts se règlent dans les Réglages.
+// A choice in the composer only applies to this conversation: defaults are set in Settings.
 function pick(kind: "model" | "mode" | "effort" | "advisor", value: string | null) {
   const v = activeView();
   if (v) {
@@ -905,12 +905,12 @@ $("model-btn").addEventListener("click", (e) => {
   const modelId = v ? v.info.model : draft.model;
   const levels = effortLevels(modelId);
   const entries: MenuEntry[] = modelChoices().map((m) => ({ label: m.displayName, checked: isCurrentModel(m, modelId), run: () => pick("model", m.value) }));
-  // Le modèle choisi travaille et consulte Opus aux moments clés : utile avec Sonnet ou Haiku.
+  // The chosen model does the work and consults Opus at key moments: useful with Sonnet or Haiku.
   const advisor = v ? v.info.advisor : draft.advisor;
-  entries.push({ sep: true }, { label: "Conseiller Opus", detail: "Consulté aux moments clés", checked: !!advisor, run: () => pick("advisor", advisor ? null : "opus") });
+  entries.push({ sep: true }, { label: t("Opus advisor"), detail: t("Consulted at key moments"), checked: !!advisor, run: () => pick("advisor", advisor ? null : "opus") });
   if (levels.length) {
     const eff = effectiveEffort(v ? v.info.effort : draft.effort) ?? "";
-    entries.push({ heading: "Effort" }, { custom: segmented(levels, eff, (id) => pick("effort", id)) });
+    entries.push({ heading: t("Effort") }, { custom: segmented(levels, eff, (id) => pick("effort", id)) });
   }
   showMenu(e.currentTarget as HTMLElement, entries, { place: "above", minWidth: 250 });
 });
@@ -930,7 +930,7 @@ async function chooseFolder() {
     const r = await open({ directory: true, multiple: false, defaultPath: draft.cwd || appHome || undefined });
     dir = typeof r === "string" ? r : null;
   } else {
-    dir = window.prompt("Dossier de travail", draft.cwd) || null;
+    dir = window.prompt(t("Working folder"), draft.cwd) || null;
   }
   if (dir) setDraftCwd(dir);
 }
@@ -941,12 +941,12 @@ function setDraftCwd(dir: string) {
   panel.contextChanged();
   composer.focus();
 }
-/** Filtre affiché seulement si la liste est assez longue pour en avoir besoin. */
+/** Filter shown only when the list is long enough to need one. */
 const FOLDER_FILTER_FROM = 7;
 
 $("folder-btn").addEventListener("click", (e) => {
   const dirs = knownDirs();
-  // Deux projets du même nom se distinguent par leur dossier parent.
+  // Two projects with the same name are told apart by their parent folder.
   const names = new Map<string, number>();
   for (const d of dirs) names.set(base(d), (names.get(base(d)) ?? 0) + 1);
   const parent = (d: string) => base(d.slice(0, d.length - base(d).length - 1));
@@ -958,16 +958,16 @@ $("folder-btn").addEventListener("click", (e) => {
       menuItem({ label: base(d), detail: (names.get(base(d)) ?? 0) > 1 ? parent(d) : undefined, title: home(d), icon: "folder", checked: d === draft.cwd, run: () => setDraftCwd(d) }),
     );
     if (!needle || NO_FOLDER.toLowerCase().includes(needle)) rows.unshift(menuItem({ label: NO_FOLDER, icon: "folderDashed", checked: !draft.cwd, run: () => setDraftCwd("") }));
-    list.replaceChildren(...(rows.length ? rows : [el("div", "menu-note", "Aucun dossier trouvé.")]));
+    list.replaceChildren(...(rows.length ? rows : [el("div", "menu-note", t("No folders found."))]));
   };
   fill("");
   let field: HTMLInputElement | null = null;
   if (dirs.length + 1 >= FOLDER_FILTER_FROM) {
     const f = el("input", "menu-filter");
     f.type = "search";
-    f.placeholder = "Filtrer";
+    f.placeholder = t("Filter");
     f.spellcheck = false;
-    f.setAttribute("aria-label", "Filtrer les dossiers");
+    f.setAttribute("aria-label", t("Filter folders"));
     f.addEventListener("input", () => fill(f.value));
     f.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") {
@@ -979,8 +979,8 @@ $("folder-btn").addEventListener("click", (e) => {
     box.append(f);
   }
   box.append(list);
-  showMenu(e.currentTarget as HTMLElement, [{ custom: box }, { sep: true }, { label: "Choisir un dossier…", icon: "plus", run: () => void chooseFolder() }], { place: "above", minWidth: 260 });
-  // Le menu s'ouvre au-dessus du bouton : sa hauteur ne doit pas bouger pendant le filtrage.
+  showMenu(e.currentTarget as HTMLElement, [{ custom: box }, { sep: true }, { label: t("Choose a folder…"), icon: "plus", run: () => void chooseFolder() }], { place: "above", minWidth: 260 });
+  // The menu opens above the button: its height must not change while filtering.
   list.style.height = `${list.offsetHeight}px`;
   field?.focus();
 });
@@ -992,14 +992,14 @@ $("more").addEventListener("click", (e) => {
   const anchor = e.currentTarget as HTMLElement;
   const close = () => void guard(api.close(v.info.sid));
   const entries: MenuEntry[] = [
-    { label: "Afficher dans le Finder", icon: "folder", run: () => reveal(v.info.cwd) },
+    { label: t("Show in Finder"), icon: "folder", run: () => reveal(v.info.cwd) },
   ];
-  if (live) entries.push({ sep: true }, { label: "Suspendre le processus", hint: "Libère la mémoire, reprise au prochain message", icon: "cpu", run: () => void guard(api.suspend(v.info.sid)) });
+  if (live) entries.push({ sep: true }, { label: t("Suspend process"), hint: t("Frees memory, resumes on the next message"), icon: "cpu", run: () => void guard(api.suspend(v.info.sid)) });
   entries.push({ sep: true }, {
-    label: "Fermer la conversation",
+    label: t("Close conversation"),
     icon: "close",
     danger: true,
-    run: () => (v.info.state === "busy" ? confirmMenu(anchor, "Claude est en train de répondre", "Fermer arrête sa réponse.", "Fermer", close, { align: "end" }) : close()),
+    run: () => (v.info.state === "busy" ? confirmMenu(anchor, t("Claude is replying"), t("Closing stops its reply."), t("Close"), close, { align: "end" }) : close()),
   });
   showMenu(anchor, entries, { align: "end", minWidth: 250 });
 });
@@ -1013,7 +1013,7 @@ function renderPerms() {
   const wanted = v ? [...v.perms.values()] : [];
   const keyOf = (p: PermissionEv) => `${v?.info.sid}:${p.requestId}`;
   const keep = new Set(wanted.map(keyOf));
-  // Une demande qui part ou qui arrive fait glisser le composer au lieu de le faire sauter.
+  // A request that leaves or arrives slides the composer instead of making it jump.
   for (const [key, card] of permCards) {
     if (keep.has(key)) continue;
     permCards.delete(key);
@@ -1026,33 +1026,33 @@ function renderPerms() {
     permCards.set(keyOf(p), card);
     box.append(card);
     void heightIn(card);
-    // Rien en cours de frappe : le clavier passe directement aux réponses.
+    // Nothing being typed: the keyboard goes straight to the answers.
     if (question && !composer.text().trim()) question.querySelector<HTMLElement>(".q-option")?.focus({ preventScroll: true });
   }
   renderWorking();
 }
 
 const PERM_VERBS: Record<string, string> = {
-  [SIM_TOOL]: "Simulateur",
-  Artifact: "Artefact",
-  Bash: "Exécuter",
-  Edit: "Modifier",
-  MultiEdit: "Modifier",
-  NotebookEdit: "Modifier",
-  Write: "Écrire",
-  Read: "Lire",
-  WebFetch: "Ouvrir",
-  WebSearch: "Rechercher",
-  Grep: "Rechercher",
-  Glob: "Rechercher",
-  Task: "Lancer un agent",
-  ExitPlanMode: "Valider le plan",
-  Agent: "Lancer un agent",
+  [SIM_TOOL]: t("Simulator"),
+  Artifact: t("Artifact"),
+  Bash: t("Run"),
+  Edit: t("Edit"),
+  MultiEdit: t("Edit"),
+  NotebookEdit: t("Edit"),
+  Write: t("Write"),
+  Read: t("Read"),
+  WebFetch: t("Open"),
+  WebSearch: t("Search"),
+  Grep: t("Search"),
+  Glob: t("Search"),
+  Task: t("Start an agent"),
+  ExitPlanMode: t("Approve plan"),
+  Agent: t("Start an agent"),
 };
 
 /**
- * Ce sur quoi porte l'action, en une ligne : commande, nom de fichier, adresse…
- * Lu par motif et non avec JSON.parse : une grosse entrée (Write) arrive tronquée au milieu.
+ * What the action is about, in one line: command, file name, address…
+ * Read by pattern, not with JSON.parse: a large input (Write) arrives cut off in the middle.
  */
 function permTarget(p: PermissionEv): string {
   if (p.toolName === "ExitPlanMode") return "";
@@ -1094,7 +1094,7 @@ function questionBar(v: SessionView, p: PermissionEv): HTMLElement | null {
   return questionCard(
     p.input,
     (answers) => settle("allow", answers),
-    () => settle("deny", undefined, "L'utilisateur a préféré ne pas répondre à cette question."),
+    () => settle("deny", undefined, "The user chose not to answer this question."),
   );
 }
 
@@ -1115,7 +1115,7 @@ function permBar(v: SessionView, p: PermissionEv): HTMLElement {
   const diff = toolDiff(p.toolName, p.input);
   const plan = planOf(p);
   if (plan !== null) {
-    // Un plan se lit avant de se valider : il est déjà ouvert.
+    // A plan is read before it is approved: it starts open.
     const body = el("div", "md perm-plan");
     body.innerHTML = renderMarkdown(plan);
     decorateCode(body);
@@ -1125,7 +1125,7 @@ function permBar(v: SessionView, p: PermissionEv): HTMLElement {
   } else {
     detail.append(diff ? renderLines(diff.lines) : wrapWithCopy(el("pre", undefined, p.input)));
   }
-  // Rien à déplier si la ligne dit déjà tout.
+  // Nothing to expand if the line already says it all.
   main.disabled = !why && target === p.input && p.input.length <= 60;
   chev.hidden = main.disabled;
   main.addEventListener("click", () => {
@@ -1145,16 +1145,16 @@ function permBar(v: SessionView, p: PermissionEv): HTMLElement {
     });
     return b;
   };
-  actions.append(mk("Refuser", "deny", "btn-ghost"));
-  if (p.canAlways && plan === null) actions.append(mk("Toujours", "always", "btn-ghost"));
-  actions.append(mk(plan === null ? "Autoriser" : "Valider", "allow", "btn-primary"));
+  actions.append(mk(t("Deny"), "deny", "btn-ghost"));
+  if (p.canAlways && plan === null) actions.append(mk(t("Always"), "always", "btn-ghost"));
+  actions.append(mk(plan === null ? t("Allow") : t("Approve"), "allow", "btn-primary"));
   card.append(main, actions, detail);
   return card;
 }
 
 // ---------------------------------------------------------------- navigation
 
-/** Temps maximal pendant lequel l'ancien écran attend un historique encore en lecture. */
+/** Longest time the old screen waits for a history still being read. */
 const HISTORY_HOLD_MS = 250;
 
 async function activate(sid: string) {
@@ -1167,7 +1167,7 @@ async function activate(sid: string) {
   void api.focus(sid);
   void refreshCliDefaults();
   const v = views.get(sid);
-  // Tout se prépare avant l'échange : l'ancien écran reste affiché et vivant pendant ce temps.
+  // Everything is prepared before the swap: the old screen stays shown and live meanwhile.
   if (v && !v.historyLoaded && v.info.cliId) {
     let late = false;
     const load = loadHistoryInto(v, v.info.cliId, false).then(async () => {
@@ -1186,7 +1186,7 @@ async function activate(sid: string) {
   composer.focus();
 }
 
-/** Calcule le Markdown par petites tranches, des derniers messages aux premiers : ce sont eux qu'on voit. */
+/** Renders Markdown in small slices, from the last messages to the first: those are the ones in view. */
 async function prerenderMarkdown(v: SessionView, deadline: number) {
   let slice = performance.now();
   for (let i = v.items.length - 1; i >= 0; i--) {
@@ -1209,7 +1209,7 @@ function newConversation(cwd?: string) {
   active = null;
   world.wake();
   if (cwd) draft.cwd = cwd === scratchDir ? "" : cwd;
-  // Chaque nouvelle conversation repart des vrais défauts : un essai sur la précédente ne la suit pas.
+  // Each new conversation starts from the real defaults: a tweak on the previous one doesn't carry over.
   draft.model = settings.defaultModel;
   draft.effort = settings.defaultEffort;
   draft.mode = settings.defaultPermissionMode;
@@ -1226,7 +1226,7 @@ function showConversation(v: SessionView | undefined) {
   const wasNew = $("main").classList.contains("is-new");
   const fromTop = box.getBoundingClientRect().top;
   const titleBefore = $("crumb").textContent;
-  // L'ancien fil part en fondu avant que `renderMain` ne masque sa zone.
+  // The old thread fades out before `renderMain` hides its area.
   renderer.mount(v, moving);
   renderMain();
   renderer.afterShow();
@@ -1235,7 +1235,7 @@ function showConversation(v: SessionView | undefined) {
   renderSidebar();
   panel.contextChanged();
   if (!moving) return;
-  // Le composer passe du centre au bas de la fenêtre en glissant.
+  // The composer slides from the middle to the bottom of the window.
   if (wasNew !== !v) flipY(box, fromTop - box.getBoundingClientRect().top);
   if (!v && wasNew !== !v) void enter($("start"), { opacity: "0", transform: "translateY(4px)" }, { delay: DUR.stagger });
   if ($("crumb").textContent !== titleBefore) void enter($("crumb"), { opacity: "0.4" }, { duration: DUR.quick });
@@ -1248,13 +1248,13 @@ async function loadHistoryInto(v: SessionView, cliId: string, mount = true) {
   v.reset();
   for (const ev of page.events) applyToView(v, ev);
   v.hasMore = page.hasMore;
-  // Relire l'historique ne doit pas rouvrir le panneau sur un ancien artefact.
+  // Reloading the history must not reopen the panel on an old artifact.
   v.artifactToShow = null;
   if (active === v.info.sid) panel.artifactsChanged();
   if (mount && active === v.info.sid) renderer.mount(v);
 }
 
-// ---------------------------------------------------------------- événements du cœur
+// ---------------------------------------------------------------- core events
 
 function applyToView(v: SessionView, ev: UiEvent): { item?: Item; added?: BlockView[]; tool?: ToolView } {
   switch (ev.kind) {
@@ -1314,7 +1314,7 @@ function onEvent(ev: UiEvent) {
     case "delta":
       if (ev.replace || v.stream.thinking !== ev.thinking) v.stream = { text: ev.text, thinking: ev.thinking };
       else v.stream.text += ev.text;
-      // La réflexion n'est pas affichée en direct : l'indicateur suffit, elle reste consultable ensuite.
+      // Thinking isn't shown live: the indicator is enough, and it can still be read afterwards.
       if (shown && !ev.thinking) renderer.setStream(ev.text, ev.replace);
       if (shown) renderWorking();
       return;
@@ -1354,7 +1354,7 @@ function onEvent(ev: UiEvent) {
     case "permission":
       v.perms.set(ev.requestId, ev);
       if (shown) renderPerms();
-      else toast(`« ${v.info.title} » attend ton accord (${ev.toolName}).`);
+      else toast(t("“{title}” is waiting for your approval ({tool}).", { title: v.info.title, tool: ev.toolName }));
       renderSidebar();
       return;
     case "permissionDone":
@@ -1383,7 +1383,7 @@ function onEvent(ev: UiEvent) {
   }
 }
 
-// ---------------------------------------------------------------- saisie
+// ---------------------------------------------------------------- input
 
 async function sendText(text: string) {
   let v = activeView();
@@ -1446,18 +1446,18 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Liens dans les messages : un lien local s'ouvre dans le navigateur intégré, les autres à l'extérieur.
+// Links in messages: a local link opens in the built-in browser, others open outside.
 $("transcript").addEventListener("click", (e) => {
   const a = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
   if (!a) return;
   e.preventDefault();
-  // Un artefact de cette conversation s'ouvre dans le panneau.
+  // An artifact from this conversation opens in the panel.
   if (activeView()?.artifacts.some((x) => x.url === a.href)) panel.showArtifact(a.href, true);
   else if (/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/.test(a.href)) panel.openUrl(a.href);
   else if (/^https?:\/\//.test(a.href)) openExternal(a.href);
 });
 
-// ---------------------------------------------------------------- mémoire (infobulles)
+// ---------------------------------------------------------------- memory (tooltips)
 
 async function pollMetrics() {
   if (document.hidden) return;
@@ -1472,13 +1472,17 @@ window.addEventListener("focus", () => {
 });
 document.addEventListener("visibilitychange", () => void api.setVisible(!document.hidden));
 
-// ---------------------------------------------------------------- démarrage
+// ---------------------------------------------------------------- boot
 
 async function boot() {
   await api.subscribe(onEvent);
   settings = await api.getSettings();
+  // The language cached by i18n.ts was out of date (settings edited elsewhere): reload in the right one.
+  if (setLang(settings.language)) return void window.location.reload();
+  translateDom();
+  void api.setLanguage(lang()).catch(() => undefined);
   scratchDir = await api.scratchDir().catch(() => "");
-  // `app_info` lance `claude --version` : on ne bloque pas le démarrage dessus.
+  // `app_info` runs `claude --version`: boot doesn't wait for it.
   void api.appInfo().then((i) => {
     appHome = i.home;
     sidebarKey = "";
@@ -1495,7 +1499,7 @@ async function boot() {
   if (first) await activate(first.info.sid);
   else newConversation();
   renderSidebar();
-  // Fenêtre encore masquée : on la montre complète, pas de liste qui se remplit sous les yeux.
+  // Window still hidden: show it complete, not with a list filling up before the user's eyes.
   await refreshHistory();
   drawSidebar();
   goLive();
@@ -1505,6 +1509,6 @@ async function boot() {
   }
 }
 void boot().finally(() => {
-  // La fenêtre attend d'être peinte pour s'afficher : sinon, elle s'ouvre sur un fond blanc.
+  // The window waits to be painted before showing: otherwise it opens on a white background.
   window.setTimeout(() => void api.appReady().catch(() => undefined), 30);
 });

@@ -1,7 +1,7 @@
 [package]
 name = "better-harness"
 version = "0.1.0"
-description = "Harness léger pour le CLI claude (remplaçant de l'onglet Code de Claude Desktop)"
+description = "Lightweight harness for the claude CLI (a replacement for the Code tab of Claude Desktop)"
 edition = "2021"
 rust-version = "1.80"
 
