@@ -1,9 +1,10 @@
-// Fichiers que Claude montre dans la conversation (outil `send_files`, src-tauri/src/files_tool.rs) :
-// les images en aperçu, agrandies au clic dans une visionneuse ; les autres en carte qui s'ouvre dans
-// leur app. Les dimensions viennent de l'en-tête du fichier : l'aperçu a sa taille avant de charger,
-// le fil ne saute pas.
+// Files Claude shows in the conversation (`send_files` tool, src-tauri/src/files_tool.rs):
+// images as previews, enlarged on click in a viewer; the others as a card that opens in
+// their app. Dimensions come from the file header: the preview has its size before loading,
+// so the thread doesn't jump.
 import type { Api, Attachment } from "./api";
 import { copyButton } from "./copy";
+import { fmtNumber, t, tp } from "./i18n";
 import { icon, type IconName } from "./icons";
 import { sentFiles } from "./labels";
 import { animateOut, DUR, enter } from "./motion";
@@ -13,26 +14,25 @@ interface Deps {
   api: Api;
   guard: <T>(p: Promise<T>) => Promise<T | undefined>;
   reveal: (path: string) => void;
-  /** La visionneuse s'ouvre ou se ferme : les vues natives du panneau doivent s'écarter ou revenir. */
+  /** The viewer opens or closes: the panel's native views must step aside or come back. */
   overlayChanged: () => void;
 }
 
-/** Une image seule s'affiche grande ; plusieurs, en vignettes d'une même hauteur. */
+/** A single image shows large; several, as thumbnails of the same height. */
 const SINGLE_H = 320;
 const THUMB_H = 132;
 const THUMB_W = [72, 240] as const;
 
-const sizeFmt = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} octets`;
-  const units = ["Ko", "Mo", "Go"];
+  if (bytes < 1024) return tp(bytes, "{n} byte", "{n} bytes");
+  const units = ["{n} KB", "{n} MB", "{n} GB"];
   let v = bytes / 1024;
   let i = 0;
   while (v >= 1024 && i < units.length - 1) {
     v /= 1024;
     i++;
   }
-  return `${sizeFmt.format(v)} ${units[i]}`;
+  return t(units[i], { n: fmtNumber(v, { maximumFractionDigits: 1 }) });
 }
 
 function iconButton(name: IconName, label: string, cls: string, run: () => void): HTMLButtonElement {
@@ -50,18 +50,18 @@ function iconButton(name: IconName, label: string, cls: string, run: () => void)
 
 export function initAttachments(d: Deps) {
   async function openFile(path: string) {
-    // Un script ou un raccourci ne s'ouvre pas : il s'exécuterait. On le montre dans le Finder.
+    // A script or a shortcut isn't opened: it would run. Show it in the Finder instead.
     const opened = await d.guard(d.api.openAttachment(path));
     if (opened === false) d.reveal(path);
   }
 
   const viewer = createViewer(d, openFile);
 
-  /** Taille du cadre ; pour une vignette, une image plus petite que lui s'y centre sans être agrandie. */
+  /** Frame size; for a thumbnail, an image smaller than the frame is centered in it without being enlarged. */
   function sizeThumb(node: HTMLElement, ratio: number, single: boolean, natural: [number, number]) {
     node.style.aspectRatio = String(ratio);
     if (single) {
-      // Jamais agrandie au-delà de sa taille réelle, jamais plus haute que SINGLE_H.
+      // Never enlarged beyond its real size, never taller than SINGLE_H.
       node.style.width = `min(100%, ${Math.round(Math.min(natural[0] || Infinity, SINGLE_H * ratio))}px)`;
       return;
     }
@@ -76,8 +76,8 @@ export function initAttachments(d: Deps) {
     const b = el("button", "att-img");
     b.type = "button";
     b.title = a.name;
-    b.setAttribute("aria-label", `Agrandir ${a.name}`);
-    // Format sans dimensions lisibles (SVG) : un cadre 4:3, corrigé au chargement.
+    b.setAttribute("aria-label", t("Enlarge {name}", { name: a.name }));
+    // Format without readable dimensions (SVG): a 4:3 frame, corrected on load.
     const ratio = a.width && a.height ? a.width / a.height : 4 / 3;
     sizeThumb(b, ratio, single, [a.width ?? 0, a.height ?? 0]);
     const img = el("img");
@@ -86,11 +86,11 @@ export function initAttachments(d: Deps) {
     img.loading = "lazy";
     img.draggable = false;
     img.addEventListener("load", () => {
-      // L'orientation EXIF d'une photo peut inverser largeur et hauteur.
+      // A photo's EXIF orientation can swap width and height.
       const real = img.naturalWidth / img.naturalHeight;
       if (real && Math.abs(real - ratio) > 0.01) sizeThumb(b, real, single, [img.naturalWidth, img.naturalHeight]);
     });
-    // Format que WebKit ne lit pas : la carte de fichier reste utilisable.
+    // Format WebKit can't read: the file card stays usable.
     img.addEventListener("error", () => b.replaceWith(fileCard(a)), { once: true });
     img.src = a.url!;
     b.append(img);
@@ -103,13 +103,13 @@ export function initAttachments(d: Deps) {
     const open = el("button", "att-open");
     open.type = "button";
     open.disabled = !a.exists;
-    open.title = a.exists ? `${a.path}\n${fileSize(a.size)}` : `Introuvable : ${a.path}`;
+    open.title = a.exists ? `${a.path}\n${fileSize(a.size)}` : t("Not found: {path}", { path: a.path });
     open.innerHTML = icon("file", 16);
     open.append(el("span", "att-name", a.name));
-    if (!a.exists) open.append(el("span", "att-note", "introuvable"));
+    if (!a.exists) open.append(el("span", "att-note", t("not found")));
     open.addEventListener("click", () => void openFile(a.path));
     row.append(open);
-    if (a.exists) row.append(iconButton("folder", "Afficher dans le Finder", "att-reveal", () => d.reveal(a.path)));
+    if (a.exists) row.append(iconButton("folder", t("Show in Finder"), "att-reveal", () => d.reveal(a.path)));
     return row;
   }
 
@@ -127,12 +127,12 @@ export function initAttachments(d: Deps) {
   }
 
   return {
-    /** Bloc des fichiers d'un appel ; `settled` quand il prend sa place, pour garder le fil en bas. */
+    /** Block of a call's files; `settled` when it takes its place, to keep the thread at the bottom. */
     render(tv: ToolView, cwd: string, settled: () => void): HTMLElement {
       const box = el("div", "att");
       const { files, caption } = sentFiles(tv.input);
       if (!files.length) return box;
-      // Déjà décrits (conversation réaffichée) : tout est en place d'un coup.
+      // Already described (conversation shown again): everything is in place at once.
       if (tv.files) {
         fill(box, tv.files, caption);
         return box;
@@ -148,10 +148,10 @@ export function initAttachments(d: Deps) {
   };
 }
 
-/** Visionneuse plein écran : une image à la fois, ← → entre les images d'un même envoi. */
+/** Full-screen viewer: one image at a time, ← → between the images of one send. */
 function createViewer(d: Deps, openFile: (path: string) => Promise<void>) {
   const dlg = el("dialog", "viewer");
-  dlg.setAttribute("aria-label", "Aperçu");
+  dlg.setAttribute("aria-label", t("Preview"));
   dlg.tabIndex = -1;
   const bar = el("div", "viewer-bar");
   bar.dataset.tauriDragRegion = "";
@@ -165,18 +165,18 @@ function createViewer(d: Deps, openFile: (path: string) => Promise<void>) {
   const current = () => items[index];
   bar.append(
     title,
-    copyButton(() => current()?.path ?? "", "Copier le chemin", "viewer-btn"),
-    iconButton("external", "Ouvrir dans son app", "viewer-btn", () => void openFile(current().path)),
-    iconButton("folder", "Afficher dans le Finder", "viewer-btn", () => d.reveal(current().path)),
-    iconButton("close", "Fermer", "viewer-btn", close),
+    copyButton(() => current()?.path ?? "", t("Copy path"), "viewer-btn"),
+    iconButton("external", t("Open in its app"), "viewer-btn", () => void openFile(current().path)),
+    iconButton("folder", t("Show in Finder"), "viewer-btn", () => d.reveal(current().path)),
+    iconButton("close", t("Close"), "viewer-btn", close),
   );
   const stage = el("div", "viewer-stage");
   const img = el("img");
   img.draggable = false;
   img.decoding = "async";
   stage.append(img);
-  const prev = iconButton("chevronLeft", "Précédente", "viewer-nav is-prev", () => show(index - 1, true));
-  const next = iconButton("chevronRight", "Suivante", "viewer-nav is-next", () => show(index + 1, true));
+  const prev = iconButton("chevronLeft", t("Previous image"), "viewer-nav is-prev", () => show(index - 1, true));
+  const next = iconButton("chevronRight", t("Next image"), "viewer-nav is-next", () => show(index + 1, true));
   dlg.append(bar, stage, prev, next);
   document.body.append(dlg);
 
@@ -187,7 +187,7 @@ function createViewer(d: Deps, openFile: (path: string) => Promise<void>) {
     img.src = a.url!;
     img.alt = a.name;
     name.textContent = a.name;
-    count.textContent = items.length > 1 ? `${index + 1} sur ${items.length}` : "";
+    count.textContent = items.length > 1 ? t("{n} of {total}", { n: index + 1, total: items.length }) : "";
     prev.hidden = next.hidden = items.length < 2;
     if (swap) void enter(img, { opacity: "0" }, { duration: DUR.quick, ease: "easeInOut" });
   }
@@ -196,7 +196,7 @@ function createViewer(d: Deps, openFile: (path: string) => Promise<void>) {
     if (!dlg.open || dlg.classList.contains("is-closing")) return;
     animateOut(dlg, "is-closing", () => {
       dlg.close();
-      // L'image décodée ne reste pas en mémoire une fois la visionneuse fermée.
+      // The decoded image doesn't stay in memory once the viewer is closed.
       img.removeAttribute("src");
       d.overlayChanged();
     });
@@ -206,7 +206,7 @@ function createViewer(d: Deps, openFile: (path: string) => Promise<void>) {
     e.preventDefault();
     close();
   });
-  // Un clic hors de l'image ferme, comme Échap.
+  // A click outside the image closes, like Esc.
   dlg.addEventListener("click", (e) => {
     if (e.target === dlg || e.target === stage) close();
   });

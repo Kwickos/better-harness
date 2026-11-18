@@ -1,7 +1,8 @@
-// Onglet Simulateur : l'écran en direct d'un simulateur iOS, tactile, sur un canvas du panneau.
-// Le pont ne tourne que pendant que l'onglet est affiché. L'image suivante n'est demandée qu'une fois
-// la précédente peinte : si l'interface prend du retard, le cœur Rust saute des images au lieu d'en empiler.
+// Simulator tab: the live screen of an iOS simulator, touch-enabled, on a canvas in the panel.
+// The bridge only runs while the tab is shown. The next frame is only requested once the previous
+// one is painted: if the UI falls behind, the Rust core skips frames instead of queuing them.
 import type { Api, SimDevice, UiEvent } from "./api";
+import { t } from "./i18n";
 import { icon } from "./icons";
 import { showMenu } from "./menu";
 import { DUR, SCALE, enter, iconIn } from "./motion";
@@ -14,15 +15,15 @@ interface Deps {
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const STORE_KEY = "bh.sim.udid";
-/** Un geste commencé à moins de 10 px d'un bord déclenche le geste du système, comme sur l'appareil. */
+/** A gesture starting less than 10 px from an edge triggers the system gesture, as on the device. */
 const EDGE_ZONE = 10;
 const EDGE = { top: 1, left: 2, bottom: 3, right: 4 } as const;
-/** Rayon des coins d'un écran, en part de sa largeur : iPhone, puis iPad. */
+/** Corner radius of a screen, as a share of its width: iPhone, then iPad. */
 const RADIUS_PHONE = 0.13;
 const RADIUS_TABLET = 0.025;
 const SHOT_FEEDBACK_MS = 1400;
 
-/** Touches physiques → codes HID (page clavier). L'iPhone applique lui-même sa disposition. */
+/** Physical keys → HID codes (keyboard page). The iPhone applies its own layout. */
 const HID: Record<string, number> = {
   Enter: 40, Escape: 41, Backspace: 42, Tab: 43, Space: 44, Minus: 45, Equal: 46, BracketLeft: 47, BracketRight: 48,
   Backslash: 49, Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54, Period: 55, Slash: 56, CapsLock: 57, IntlBackslash: 100,
@@ -45,7 +46,7 @@ const remember = (udid: string) => {
   try {
     localStorage.setItem(STORE_KEY, udid);
   } catch {
-    /* préférence non mémorisée */
+    /* preference not remembered */
   }
 };
 
@@ -64,13 +65,13 @@ export function initSimulatorTab(d: Deps) {
   let visible = false;
   let devices: SimDevice[] = [];
   let udid = read();
-  /** Vaut pour une session d'écran : l'incrémenter arrête la boucle d'images en cours. */
+  /** One value per screen session: incrementing it stops the running frame loop. */
   let session = 0;
   let streaming: string | null = null;
   let hasFrame = false;
-  /** L'appareil dont le canvas garde la dernière image : on le revoit aussitôt en rouvrant l'onglet. */
+  /** The device whose last frame the canvas keeps: it shows right away when the tab reopens. */
   let painted: string | null = null;
-  /** Erreur à afficher à la place de l'écran, avec son action. */
+  /** Error to show instead of the screen, with its action. */
   let problem: { title: string; sub?: string; action?: string; run?: () => void } | null = null;
   let booting = false;
   let appearance: "light" | "dark" | null = null;
@@ -78,7 +79,7 @@ export function initSimulatorTab(d: Deps) {
   const current = () => devices.find((x) => x.udid === udid) ?? null;
   const send = (line: string) => void d.api.simInput(line).catch(() => {});
 
-  /** Le choix mémorisé s'il existe encore, sinon un appareil déjà démarré, sinon le premier iPhone. */
+  /** The remembered choice if it still exists, else an already booted device, else the first iPhone. */
   function pickDevice() {
     if (current()) return;
     const fallback = devices.find((x) => x.state === "Booted") ?? devices.find((x) => x.name.includes("iPhone")) ?? devices[0];
@@ -90,7 +91,7 @@ export function initSimulatorTab(d: Deps) {
     return twin ? `${device.name} (${device.runtime})` : device.name;
   }
 
-  // ------------------------------------------------------------ affichage
+  // ------------------------------------------------------------ display
 
   function render() {
     const device = current();
@@ -100,8 +101,7 @@ export function initSimulatorTab(d: Deps) {
     actions.hidden = !on || !!problem;
     themeBtn.hidden = !on || appearance === null;
     if (appearance) {
-      const next = appearance === "dark" ? "clair" : "sombre";
-      themeBtn.title = `Passer en mode ${next}`;
+      themeBtn.title = appearance === "dark" ? t("Switch to light mode") : t("Switch to dark mode");
       themeBtn.setAttribute("aria-label", themeBtn.title);
       themeBtn.firstElementChild!.innerHTML = icon(appearance === "dark" ? "sun" : "moon");
     }
@@ -115,15 +115,15 @@ export function initSimulatorTab(d: Deps) {
     if (problem) {
       ({ title, sub = "", action = "", run } = problem);
     } else if (!device) {
-      title = "Aucun simulateur";
-      sub = "Crée un appareil dans Xcode.";
+      title = t("No simulators");
+      sub = t("Create a device in Xcode.");
     } else if (!on) {
       title = label(device);
-      action = booting ? "Démarrage…" : "Démarrer";
+      action = booting ? t("Starting…") : t("Start");
       run = booting ? undefined : () => void boot(device.udid);
     } else if (!hasFrame) {
       title = label(device);
-      sub = "Connexion à l'écran…";
+      sub = t("Connecting to the screen…");
     }
     empty.hidden = showScreen;
     emptyTitle.textContent = title;
@@ -156,7 +156,7 @@ export function initSimulatorTab(d: Deps) {
   }
   new ResizeObserver(fitCorners).observe(canvas);
 
-  // ------------------------------------------------------------ flux
+  // ------------------------------------------------------------ stream
 
   async function loop(token: number) {
     while (token === session) {
@@ -174,7 +174,7 @@ export function initSimulatorTab(d: Deps) {
         return;
       }
       paint(bitmap);
-      // Suspendu quand la fenêtre est cachée : rien n'est décodé pour rien.
+      // Suspended while the window is hidden: nothing is decoded for nothing.
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
   }
@@ -211,11 +211,11 @@ export function initSimulatorTab(d: Deps) {
   }
 
   function showProblem(message: string) {
-    problem = { title: "Écran indisponible", sub: message, action: "Réessayer", run: () => void sync() };
+    problem = { title: t("Screen unavailable"), sub: message, action: t("Retry"), run: () => void sync() };
     render();
   }
 
-  /** Remet l'onglet en accord avec l'appareil choisi. */
+  /** Brings the tab back in line with the chosen device. */
   async function sync() {
     problem = null;
     const device = current();
@@ -231,7 +231,7 @@ export function initSimulatorTab(d: Deps) {
       devices = await d.api.simDevices();
     } catch (error) {
       devices = [];
-      problem = { title: "Simulateur indisponible", sub: String(error) };
+      problem = { title: t("Simulator unavailable"), sub: String(error) };
       stopStream();
       render();
       return;
@@ -260,7 +260,7 @@ export function initSimulatorTab(d: Deps) {
     render();
   }
 
-  // ------------------------------------------------------------ commandes de la barre
+  // ------------------------------------------------------------ bar controls
 
   deviceBtn.addEventListener("click", () => {
     showMenu(
@@ -320,9 +320,9 @@ export function initSimulatorTab(d: Deps) {
     await refresh();
   });
 
-  // ------------------------------------------------------------ touches
+  // ------------------------------------------------------------ touch
 
-  /** Position en fraction de l'écran, et bord le plus proche si le geste part de la zone de bord. */
+  /** Position as a fraction of the screen, and the nearest edge if the gesture starts in the edge zone. */
   function locate(e: PointerEvent) {
     const r = canvas.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
@@ -340,7 +340,7 @@ export function initSimulatorTab(d: Deps) {
   }
 
   let touching = false;
-  /** Départ en bord de l'écran : on attend de savoir si c'est un geste ou un simple toucher. */
+  /** Start at the screen edge: wait to know whether it's a gesture or a plain tap. */
   let heldStart: { x: string; y: string; edge: number } | null = null;
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -376,7 +376,7 @@ export function initSimulatorTab(d: Deps) {
   canvas.addEventListener("pointerup", release);
   canvas.addEventListener("pointercancel", release);
 
-  // ------------------------------------------------------------ clavier
+  // ------------------------------------------------------------ keyboard
 
   const held = new Set<number>();
   function releaseInputs() {
@@ -387,7 +387,7 @@ export function initSimulatorTab(d: Deps) {
   }
 
   canvas.addEventListener("keydown", (e) => {
-    // ⌘ reste à l'app : ses raccourcis marchent aussi quand l'écran a le focus.
+    // ⌘ stays with the app: its shortcuts also work while the screen has focus.
     if (e.metaKey) return;
     const code = HID[e.code];
     if (code === undefined) return;
@@ -409,15 +409,15 @@ export function initSimulatorTab(d: Deps) {
     held.clear();
   });
 
-  // ------------------------------------------------------------ cycle de vie
+  // ------------------------------------------------------------ lifecycle
 
-  // Le choix mémorisé sert de défaut à Claude, même si l'onglet n'a jamais été ouvert.
+  // The remembered choice is Claude's default, even if the tab was never opened.
   if (udid) void d.api.simSelect(udid).catch(() => {});
 
   document.addEventListener("visibilitychange", () => {
     if (streaming) send(document.hidden ? "pause" : "resume");
   });
-  // Un appareil a pu être démarré ou éteint ailleurs (Xcode, le terminal, Claude).
+  // A device may have been booted or shut down elsewhere (Xcode, the terminal, Claude).
   window.addEventListener("focus", () => {
     if (visible) void refresh();
   });
@@ -431,7 +431,7 @@ export function initSimulatorTab(d: Deps) {
     },
     onEvent(ev: Extract<UiEvent, { kind: "simulator" }>) {
       if (ev.state === "agent") {
-        // Claude agit sur cet appareil : le panneau montre le même.
+        // Claude acts on this device: the panel shows the same one.
         if (udid !== ev.udid) appearance = null;
         udid = ev.udid;
         remember(udid);
@@ -439,12 +439,12 @@ export function initSimulatorTab(d: Deps) {
         return;
       }
       if (ev.udid !== streaming) return;
-      if (ev.state === "no-input") canvas.title = "Touches indisponibles avec cette version d'Xcode";
+      if (ev.state === "no-input") canvas.title = t("Input unavailable with this Xcode version");
       else if (ev.state === "ready") canvas.removeAttribute("title");
       else if (ev.state === "error") {
         streaming = null;
         session++;
-        showProblem(ev.message ?? "Le pont du simulateur s'est arrêté.");
+        showProblem(ev.message ?? t("The simulator bridge stopped."));
       } else if (ev.state === "ended") {
         streaming = null;
         session++;

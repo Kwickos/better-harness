@@ -1,10 +1,11 @@
-//! Serveurs de développement d'un projet : `.claude/launch.json` (même format que
-//! Claude Desktop) et scripts courants de `package.json`. Chaque serveur tourne dans
-//! son propre groupe de processus ; les journaux sont gardés en mémoire (500 lignes)
-//! et envoyés à l'UI par paquets, l'URL locale est détectée dans la sortie.
+//! A project's dev servers: `.claude/launch.json` (same format as
+//! Claude Desktop) and the usual `package.json` scripts. Each server runs in
+//! its own process group; logs are kept in memory (500 lines)
+//! and sent to the UI in batches, the local URL is detected in the output.
 
 use crate::events::UiEvent;
 use crate::hub::Hub;
+use crate::i18n::tr;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
@@ -68,7 +69,7 @@ fn read_json(p: &Path) -> Option<Value> {
     serde_json::from_slice(&std::fs::read(p).ok()?).ok()
 }
 
-/// Définitions trouvées dans le projet, dans l'ordre : launch.json puis package.json.
+/// Definitions found in the project, in order: launch.json then package.json.
 fn definitions(cwd: &str) -> Vec<ServerDef> {
     let root = Path::new(cwd);
     let mut out = Vec::new();
@@ -112,7 +113,7 @@ fn definitions(cwd: &str) -> Vec<ServerDef> {
     out
 }
 
-/// Repère une URL locale dans une ligne de journal (« Local: http://localhost:5173/ »).
+/// Spots a local URL in a log line ("Local: http://localhost:5173/").
 fn find_local_url(line: &str) -> Option<String> {
     for host in ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"] {
         for scheme in ["http", "https"] {
@@ -128,7 +129,7 @@ fn find_local_url(line: &str) -> Option<String> {
     None
 }
 
-/// Retire les séquences ANSI (couleurs, effacements) des journaux.
+/// Strips ANSI sequences (colors, erasures) from logs.
 fn strip_ansi(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
@@ -197,7 +198,7 @@ impl Servers {
     }
 
     pub async fn start(self: &Arc<Self>, cwd: String, id: String) -> Result<ServerInfo, String> {
-        let def = definitions(&cwd).into_iter().find(|d| d.id == id).ok_or("Serveur introuvable dans ce projet.")?;
+        let def = definitions(&cwd).into_iter().find(|d| d.id == id).ok_or(tr("Server not found in this project.", "Serveur introuvable dans ce projet."))?;
         let key = key_of(&cwd, &id);
         if self.map.lock().unwrap().get(&key).is_some_and(|r| r.pid.is_some()) {
             return Ok(Self::info(&cwd, &def, self.map.lock().unwrap().get(&key)));
@@ -208,14 +209,16 @@ impl Servers {
             .env("PATH", crate::shellenv::path().await)
             .env("BROWSER", "none")
             .env("FORCE_COLOR", "0")
-            // Sans cela, Python (Django, Flask, http.server…) garde ses journaux en tampon.
+            // Without this, Python (Django, Flask, http.server…) buffers its logs.
             .env("PYTHONUNBUFFERED", "1")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true)
             .process_group(0);
-        let mut child = cmd.spawn().map_err(|e| format!("Lancement de « {} » impossible : {e}", def.command))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| tr(format!("Could not start \"{}\": {e}", def.command), format!("Lancement de « {} » impossible : {e}", def.command)))?;
         let pid = child.id();
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -249,7 +252,8 @@ impl Servers {
                     r.state = if r.stopping || code == Some(0) { "stopped".into() } else { "crashed".into() };
                 }
             }
-            me.push_line(&k, format!("— arrêté{}", code.map(|c| format!(" (code {c})")).unwrap_or_default()));
+            let code = code.map(|c| format!(" (code {c})")).unwrap_or_default();
+            me.push_line(&k, tr(format!("— stopped{code}"), format!("— arrêté{code}")));
             me.emit_info(&k);
         });
         self.emit_info(&key);

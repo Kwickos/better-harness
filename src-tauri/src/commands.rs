@@ -1,6 +1,7 @@
 use crate::events::{MetricsSnapshot, SessionInfo, UiEvent};
 use crate::history::{self, HistoryEntry};
 use crate::hub::{CreateOpts, Hub};
+use crate::i18n::tr;
 use crate::mcp::{self, McpEntry};
 use crate::metrics::Metrics;
 use crate::settings::Settings;
@@ -61,7 +62,7 @@ pub async fn set_model(hub: H<'_>, sid: String, model: Option<String>) -> Result
 
 #[tauri::command]
 pub fn suspend_session(hub: H<'_>, sid: String) {
-    hub.suspend(&sid, "manuelle");
+    hub.suspend(&sid, tr("manual", "manuelle"));
 }
 
 #[tauri::command]
@@ -135,6 +136,12 @@ pub fn get_settings(hub: H<'_>) -> Settings {
     hub.settings.lock().unwrap().clone()
 }
 
+/// Language the UI resolved from the settings, for the messages Rust sends it.
+#[tauri::command]
+pub fn set_language(lang: String) {
+    crate::i18n::set(&lang);
+}
+
 #[tauri::command]
 pub fn save_settings(hub: H<'_>, settings: Settings) -> Result<(), String> {
     hub.save_settings(settings)
@@ -172,7 +179,7 @@ pub async fn app_info(app: tauri::AppHandle, hub: H<'_>) -> Result<AppInfo, Stri
     })
 }
 
-// ---------------------------------------------------------------- effort, contexte, MCP
+// ---------------------------------------------------------------- effort, context, MCP
 
 #[tauri::command]
 pub async fn set_effort(hub: H<'_>, sid: String, effort: Option<String>) -> Result<(), String> {
@@ -204,7 +211,7 @@ pub async fn mcp_reconnect(hub: H<'_>, sid: String, name: String) -> Result<(), 
     hub.inner().clone().request(&sid, serde_json::json!({ "subtype": "mcp_reconnect", "serverName": name })).await.map(|_| ())
 }
 
-// ---------------------------------------------------------------- serveurs de dev
+// ---------------------------------------------------------------- dev servers
 
 type S<'a> = State<'a, Arc<crate::servers::Servers>>;
 
@@ -228,7 +235,7 @@ pub fn server_logs(servers: S<'_>, key: String) -> Vec<String> {
     servers.logs(&key)
 }
 
-// ---------------------------------------------------------------- navigateur intégré
+// ---------------------------------------------------------------- built-in browser
 
 type B<'a> = State<'a, crate::browser::Browser>;
 
@@ -277,19 +284,19 @@ pub async fn git_discard(cwd: String, path: String) -> Result<(), String> {
     crate::git::discard(crate::shellenv::path().await, &cwd, &path, history::to_trash).await
 }
 
-/// Commandes et skills que le CLI connaît dans ce dossier (les « / » du composer).
+/// Commands and skills the CLI knows in this folder (the composer's "/").
 #[tauri::command]
 pub async fn list_commands(hub: H<'_>, cwd: String) -> Result<serde_json::Value, String> {
     hub.commands(&cwd).await
 }
 
-/// Fichiers et dossiers proposés après « @ ».
+/// Files and folders suggested after "@".
 #[tauri::command]
 pub async fn mention_files(cwd: String, query: String) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || crate::mentions::search(&cwd, &query)).await.map_err(|e| e.to_string())
 }
 
-/// Presse-papiers par le système : ne dépend ni du contexte de la vue web ni de ses autorisations.
+/// Clipboard through the system: depends neither on the web view's context nor on its permissions.
 #[tauri::command]
 pub async fn copy_text(text: String) -> Result<(), String> {
     use tokio::io::AsyncWriteExt;
@@ -300,24 +307,24 @@ pub async fn copy_text(text: String) -> Result<(), String> {
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| e.to_string())?;
-    let mut stdin = child.stdin.take().ok_or("stdin indisponible")?;
+    let mut stdin = child.stdin.take().ok_or(tr("stdin unavailable", "stdin indisponible"))?;
     stdin.write_all(text.as_bytes()).await.map_err(|e| e.to_string())?;
     drop(stdin);
     let status = child.wait().await.map_err(|e| e.to_string())?;
     if status.success() {
         Ok(())
     } else {
-        Err("pbcopy a échoué.".into())
+        Err(tr("pbcopy failed.", "pbcopy a échoué.").into())
     }
 }
 
-/// L'interface est peinte : la fenêtre peut s'afficher, sans passer par un fond blanc.
+/// The UI is painted: the window can show without flashing a white background.
 #[tauri::command]
 pub fn app_ready(window: tauri::Window) -> Result<(), String> {
     window.show().map_err(|e| e.to_string())
 }
 
-// ---------------------------------------------------------------- simulateur iOS
+// ---------------------------------------------------------------- iOS simulator
 
 type Sim<'a> = State<'a, Arc<crate::simulator::Simulator>>;
 
@@ -346,13 +353,13 @@ pub fn sim_detach(sim: Sim<'_>) {
     sim.detach_ui();
 }
 
-/// L'appareil affiché par le panneau : celui que Claude prend par défaut.
+/// The device shown by the panel: the one Claude uses by default.
 #[tauri::command]
 pub fn sim_select(sim: Sim<'_>, udid: Option<String>) {
     sim.select(udid);
 }
 
-/// Binaire : une image JPEG, ou rien si l'écran n'a pas changé entre-temps.
+/// Binary: a JPEG image, or nothing if the screen has not changed since.
 #[tauri::command]
 pub async fn sim_frame(sim: Sim<'_>) -> Result<tauri::ipc::Response, String> {
     Ok(tauri::ipc::Response::new(sim.next_frame().await))
@@ -373,11 +380,11 @@ pub async fn sim_appearance(udid: String, value: Option<String>) -> Result<Strin
     crate::simulator::appearance(&udid, value.as_deref()).await
 }
 
-// ---------------------------------------------------------------- artefacts
+// ---------------------------------------------------------------- artifacts
 
 type Art<'a> = State<'a, crate::artifacts::ArtifactView>;
 
-/// `false` : le fichier n'est plus là, l'interface propose claude.ai.
+/// `false`: the file is gone, the UI offers claude.ai.
 #[tauri::command]
 pub fn artifact_show(view: Art<'_>, path: String, w: f64, h: f64) -> Result<bool, String> {
     view.show(&path, w, h)
@@ -398,16 +405,16 @@ pub fn artifact_close(view: Art<'_>) {
     view.close();
 }
 
-/// À n'appeler qu'après la confirmation de l'utilisateur : la suppression est définitive.
+/// Call only after the user has confirmed: the deletion is permanent.
 #[tauri::command]
 pub async fn artifact_delete(view: Art<'_>, url: String) -> Result<bool, String> {
     view.delete(&url).await
 }
 
-// ---------------------------------------------------------------- fichiers joints par Claude
+// ---------------------------------------------------------------- files attached by Claude
 
-/// Ce que l'interface affiche des fichiers joints. Les images deviennent lisibles par le protocole
-/// `asset`, une à une : seuls les fichiers que Claude a montrés y entrent, jamais un dossier entier.
+/// What the UI shows of attached files. Images become readable through the `asset` protocol,
+/// one by one: only the files Claude showed get in, never a whole folder.
 #[tauri::command]
 pub fn attachments(app: tauri::AppHandle, cwd: String, paths: Vec<String>) -> Vec<crate::files_tool::Attachment> {
     use tauri::Manager;
@@ -424,7 +431,7 @@ pub fn attachments(app: tauri::AppHandle, cwd: String, paths: Vec<String>) -> Ve
         .collect()
 }
 
-/// `false` : le fichier pourrait s'exécuter (script, raccourci, exécutable) ; l'interface le montre dans le Finder.
+/// `false`: the file could run (script, shortcut, executable); the UI shows it in the Finder.
 #[tauri::command]
 pub fn open_attachment(path: String) -> Result<bool, String> {
     let path = std::path::PathBuf::from(path);
@@ -435,7 +442,7 @@ pub fn open_attachment(path: String) -> Result<bool, String> {
     Ok(true)
 }
 
-// ---------------------------------------------------------------- mises à jour
+// ---------------------------------------------------------------- updates
 
 type Up<'a> = State<'a, Arc<crate::updates::Updates>>;
 
@@ -449,7 +456,7 @@ pub async fn update_check(app: tauri::AppHandle, updates: Up<'_>) -> Result<crat
     Ok(updates.check(&app).await)
 }
 
-/// Installe la version téléchargée puis relance l'app (les processus claude sont arrêtés proprement).
+/// Installs the downloaded version then restarts the app (claude processes are stopped cleanly).
 #[tauri::command]
 pub fn update_install(app: tauri::AppHandle, updates: Up<'_>) -> Result<(), String> {
     if updates.install()? {

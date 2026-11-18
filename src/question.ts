@@ -1,6 +1,7 @@
-// Questions posées par le modèle (`AskUserQuestion`), une à la fois : jamais de défilement dans la carte.
-// Le CLI attend une table « texte de la question → réponse », choix multiples séparés par des virgules.
+// Questions asked by the model (`AskUserQuestion`), one at a time: never any scrolling inside the card.
+// The CLI expects a "question text → answer" table, multiple choices separated by commas.
 import { icon } from "./icons";
+import { t } from "./i18n";
 import { DIST, enter, heightFrom, iconIn } from "./motion";
 import { el } from "./transcript";
 
@@ -23,7 +24,7 @@ function parse(input: string): Question[] | null {
   }
 }
 
-/** La carte de réponse, ou null si l'entrée n'est pas lisible (la demande générique prend alors le relais). */
+/** The answer card, or null if the input can't be read (the generic request takes over then). */
 export function questionCard(input: string, onAnswer: (answers: Record<string, string>) => void, onSkip: () => void): HTMLElement | null {
   const parsed = parse(input);
   if (!parsed) return null;
@@ -55,10 +56,10 @@ export function questionCard(input: string, onAnswer: (answers: Record<string, s
     head.append(el("p", "q-text", q.question));
     if (questions.length > 1) head.append(el("span", "q-step", `${index + 1}/${questions.length}`));
 
-    const primary = el("button", "btn btn-primary", index < questions.length - 1 ? "Suivant" : "Répondre");
+    const primary = el("button", "btn btn-primary", index < questions.length - 1 ? t("Next") : t("Answer"));
     primary.type = "button";
     primary.addEventListener("click", advance);
-    // Choix unique : un clic sur l'option suffit, le bouton ne sert que pour une réponse écrite.
+    // Single choice: one click on the option is enough, the button is only for a typed answer.
     const refresh = () => {
       primary.disabled = !answerOf(index);
       primary.hidden = !q.multiSelect && !others[index].trim();
@@ -98,13 +99,13 @@ export function questionCard(input: string, onAnswer: (answers: Record<string, s
 
     const other = el("input", "q-other");
     other.type = "text";
-    other.placeholder = "Autre réponse";
+    other.placeholder = t("Other answer");
     other.value = others[index];
     other.spellcheck = false;
-    other.setAttribute("aria-label", `Autre réponse : ${q.question}`);
+    other.setAttribute("aria-label", t("Other answer: {question}", { question: q.question }));
     other.addEventListener("input", () => {
       others[index] = other.value;
-      // Choix unique : écrire sa réponse remplace l'option cochée.
+      // Single choice: typing an answer replaces the checked option.
       if (!q.multiSelect && other.value.trim() && picks[index].size) {
         picks[index].clear();
         buttons.forEach((x) => x.paint(false));
@@ -119,12 +120,12 @@ export function questionCard(input: string, onAnswer: (answers: Record<string, s
     });
 
     const actions = el("div", "q-actions");
-    const skip = el("button", "btn btn-ghost", "Ignorer");
+    const skip = el("button", "btn btn-ghost", t("Skip"));
     skip.type = "button";
     skip.addEventListener("click", onSkip);
     actions.append(skip);
     if (index > 0) {
-      const back = el("button", "btn btn-ghost", "Précédent");
+      const back = el("button", "btn btn-ghost", t("Back"));
       back.type = "button";
       back.addEventListener("click", () => show(index - 1, -1));
       actions.append(back);
@@ -143,7 +144,7 @@ export function questionCard(input: string, onAnswer: (answers: Record<string, s
 
   show(0, 1);
 
-  // Clavier : les chiffres choisissent, les flèches se déplacent.
+  // Keyboard: digits pick, arrows move.
   card.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -152,7 +153,7 @@ export function questionCard(input: string, onAnswer: (answers: Record<string, s
       const i = stops.indexOf(target);
       stops[(i + (e.key === "ArrowDown" ? 1 : -1) + stops.length) % stops.length]?.focus();
     } else if (target.tagName !== "INPUT" && /^[1-9]$/.test(e.key)) {
-      // Répondre peut rendre le focus au composer : sans ceci, le chiffre s'y écrirait.
+      // Answering can give focus back to the composer: without this, the digit would be typed there.
       e.preventDefault();
       card.querySelectorAll<HTMLElement>(".q-option")[Number(e.key) - 1]?.click();
     }

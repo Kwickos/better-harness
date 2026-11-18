@@ -1,17 +1,19 @@
+English · [Français](README.fr.md)
+
 # Better Harness
 
-Better Harness est un harness léger pour le CLI `claude`, conçu pour remplacer l'onglet **Code** de Claude Desktop sur un Mac qui sature.
+Better Harness is a lightweight harness for the `claude` CLI, built to replace the **Code** tab of Claude Desktop on a Mac that can't keep up.
 
-Le moteur ne change pas : c'est le **CLI `claude` officiel**, piloté en `stream-json` exactement comme le fait l'Agent SDK embarqué dans Desktop. Tu gardes donc ton abonnement, les outils, les skills, les hooks, les plugins et les MCP. Seule la couche autour change, pour être beaucoup plus sobre :
-- l'interface ;
-- la gestion des processus ;
-- les serveurs MCP.
+The engine stays the same: the **official `claude` CLI**, driven in `stream-json` exactly the way the Agent SDK embedded in Desktop does it. You keep your subscription, tools, skills, hooks, plugins and MCP servers. Only the layer around it changes, to be much leaner:
+- the interface;
+- process management;
+- MCP servers.
 
-Le pourquoi, chiffres à l'appui : [`docs/ANALYSE.md`](docs/ANALYSE.md). Les mesures du harness : [`docs/MESURES.md`](docs/MESURES.md).
+The why, with numbers: [`docs/ANALYSIS.md`](docs/ANALYSIS.md). The harness measurements: [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md).
 
-## Lancer
+## Run
 
-Prérequis : Rust ≥ 1.80, Node ≥ 20, et le CLI `claude` installé et connecté (`claude` doit marcher dans un terminal).
+Requirements: Rust ≥ 1.80, Node ≥ 20, and the `claude` CLI installed and signed in (`claude` must work in a terminal).
 
 ```bash
 npm install
@@ -21,156 +23,159 @@ npm install
 npm run app
 ```
 
-`npm run app` lance l'app en mode développement. Pour produire `Better Harness.app` (dans `src-tauri/target/release/bundle/macos/`) :
+`npm run app` starts the app in development mode. To build `Better Harness.app` (in `src-tauri/target/release/bundle/macos/`):
 
 ```bash
 npm run bundle
 ```
 
-Pour tester sans consommer de quota, mets ce chemin dans **Réglages → Chemin du binaire claude** : `scripts/fake-claude.py`. C'est un faux CLI qui parle le même protocole : streaming, appel d'outil, demande de permission et résultat. Un message contenant « long » déclenche 20 s de streaming continu, pour les mesures.
+To test without using quota, set **Settings → claude binary path** to `scripts/fake-claude.py`. It's a fake CLI that speaks the same protocol: streaming, tool call, permission request and result. A message containing "long" triggers 20 s of continuous streaming, for measurements.
 
-### Diagnostic
+### Diagnostics
 
-- **Journal du protocole.** Lance l'app avec la variable `BH_PROTOCOL_LOG`. Chaque ligne échangée avec le CLI y est écrite, horodatée (`→` envoyé, `←` reçu).
+- **Protocol log.** Start the app with the `BH_PROTOCOL_LOG` variable. Every line exchanged with the CLI is written to it, timestamped (`→` sent, `←` received).
 
   ```bash
   open --env BH_PROTOCOL_LOG=/tmp/bh-protocol.log "src-tauri/target/release/bundle/macos/Better Harness.app"
   ```
 
-- **CLI muet.** Si le CLI ne répond pas dans les 20 s après son lancement, une notice s'affiche avec la fin de son stderr.
-- **Demandes d'accès macOS.** macOS demande l'autorisation la première fois que l'app accède à un dossier protégé (Documents, Bureau…). Avec une signature ad hoc, la demande revient **après chaque rebuild**. Tant que la demande n'a pas reçu de réponse, le CLI attend. Pour éviter ces demandes répétées, signe l'app avec un certificat stable (`bundle.macOS.signingIdentity` dans `tauri.conf.json`).
+- **Silent CLI.** If the CLI doesn't respond within 20 s of starting, a notice shows the end of its stderr.
+- **macOS access prompts.** macOS asks for permission the first time the app accesses a protected folder (Documents, Desktop…). With an ad hoc signature, the prompt comes back **after every rebuild**. Until it is answered, the CLI waits. To avoid repeated prompts, sign the app with a stable certificate (`bundle.macOS.signingIdentity` in `tauri.conf.json`).
 
-## Installer
+## Install
 
-Télécharge `Better-Harness_<version>_universal.dmg` dans les [releases](https://github.com/Kwickos/better-harness/releases/latest). L'app est universelle (Apple Silicon et Intel) et tourne à partir de **macOS 13 Ventura** (13.7.8 compris).
+Download `Better-Harness_<version>_universal.dmg` from the [releases](https://github.com/Kwickos/better-harness/releases/latest). The app is universal (Apple Silicon and Intel) and runs on **macOS 13 Ventura** and later (13.7.8 included).
 
-Elle n'est pas notariée par Apple : au premier lancement, fais **clic droit → Ouvrir** sur l'app dans le dossier Applications, ou lance :
+It isn't notarized by Apple: on first launch, **right-click → Open** the app in the Applications folder, or run:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Better Harness.app"
 ```
 
-## Mises à jour
+## Updates
 
-L'app cherche une nouvelle version 20 s après son lancement, puis toutes les 6 heures. Elle lit `latest.json` dans la dernière release de ce dépôt. Une version trouvée se télécharge en arrière-plan et sa signature est vérifiée. Ensuite, un bouton **Mettre à jour** apparaît en bas de la barre latérale. Si tu ne cliques pas, elle s'installe à la fermeture de l'app. **Réglages → À propos** permet aussi de lancer la recherche à la main.
+The app checks for a new version 20 s after launch, then every 6 hours. It reads `latest.json` from the latest release of this repository. A new version downloads in the background and its signature is verified. Then an **Update** button appears at the bottom of the sidebar. If you don't click it, the update installs when the app quits. **Settings → About** also lets you check by hand.
 
-### Publier une version
+### Publish a version
 
-Les versions sont publiées depuis ce Mac, sous le compte GitHub **Kwickos** uniquement, à partir de `main` à jour :
+Versions are published from this Mac, under the **Kwickos** GitHub account only, from an up-to-date `main`:
 
 ```bash
-npm run release -- 0.2.0 "Ce qui change"
+npm run release -- 0.2.0 "What changed"
 ```
 
-Une bêta s'écrit `0.3.0-beta.1` : elle est publiée en pré-release et n'est jamais proposée aux apps stables.
+A beta is written `0.3.0-beta.1`: it is published as a pre-release and never offered to stable installs.
 
-Le script s'arrête si gh, git ou le remote ne sont pas Kwickos, si des modifications ne sont pas commitées, ou si les protections GitHub ont changé. Il fait ensuite, dans l'ordre :
+The script stops if gh, git or the remote aren't Kwickos, if there are uncommitted changes, or if the GitHub protections have changed. Then, in order:
 
-1. il monte la version dans `package.json`, `Cargo.toml` et `tauri.conf.json`, sur une branche `release/v<version>` ;
-2. il construit l'app universelle ;
-3. il vérifie que chaque binaire démarre sur macOS 13 ;
-4. il signe le paquet de mise à jour avec `~/.tauri/better-harness.key` (mot de passe dans le Trousseau, élément « better-harness updater key ») ;
-5. il ouvre la PR `release: v<version>`, attend la CI, puis la merge en squash ;
-6. il tague ce commit de `main`, puis crée la release avec le `.dmg`, le `.app.tar.gz` et `latest.json`.
+1. it bumps the version in `package.json`, `Cargo.toml` and `tauri.conf.json`, on a `release/v<version>` branch;
+2. it builds the universal app;
+3. it checks that each binary runs on macOS 13;
+4. it signs the update package with `~/.tauri/better-harness.key` (password in the Keychain, item "better-harness updater key");
+5. it opens the `release: v<version>` PR, waits for CI, then squash-merges it;
+6. it tags that commit on `main`, then creates the release with the `.dmg`, the `.app.tar.gz` and `latest.json`.
 
-**Sauvegarde la clé et son mot de passe.** Sans eux, les apps déjà installées ne pourront plus se mettre à jour.
+**Back up the key and its password.** Without them, installed apps can no longer update.
 
-Branches, PR, CI et protections GitHub : voir [CONTRIBUTING.md](CONTRIBUTING.md).
+Branches, PRs, CI and GitHub protections: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Ce qui le rend léger
+## What makes it light
 
-- **Pas de Chromium.** L'app utilise le WebKit du système via Tauri. L'UI est en TypeScript sans framework (environ 220 Ko de JS, 75 Ko compressés).
-- **Outils allégés.** `Workflow` et `ScheduleWakeup` (utilisé par `/loop`) sont retirés par défaut : environ 5 000 tokens de moins à chaque requête (39 500 → 34 400, mesuré avec `get_context_usage`). Une case dans les Réglages les remet.
-- **Streaming coalescé.** Le texte en cours de génération est regroupé côté Rust : 25 envois par seconde au maximum. Il n'est envoyé que pour la session affichée, et seulement quand la fenêtre est visible.
-- **Processus à la demande :**
-  - aucun processus `claude` n'est lancé avant ton premier message ;
-  - au plus *N* processus vivent en même temps (3 par défaut) ;
-  - une session inactive est suspendue après *X* minutes (10 par défaut) ;
-  - le message suivant la reprend automatiquement via `--resume`.
-- **MCP à la carte.** Pour chaque session, tu choisis « configuration standard » ou « seulement ceux cochés » (`--strict-mcp-config`). À la suspension, tout le groupe de processus est tué, serveurs MCP compris.
-- **Historique sans tout charger.** La liste lit 64 Ko au début et à la fin de chaque fichier de `~/.claude/projects` ; un transcript se charge en partant de la fin.
-- **Compteur mémoire intégré.** En bas à gauche s'affichent la mémoire du cœur Rust et celle de chaque session (CLI + MCP). Les processus WebKit ne sont pas comptés.
+- **No Chromium.** The app uses the system WebKit through Tauri. The UI is TypeScript without a framework (about 220 KB of JS, 75 KB compressed).
+- **Lighter tools.** `Workflow` and `ScheduleWakeup` (used by `/loop`) are removed by default: about 5,000 fewer tokens on every request (39,500 → 34,400, measured with `get_context_usage`). A checkbox in Settings brings them back.
+- **Coalesced streaming.** Text being generated is batched on the Rust side: 25 sends per second at most. It is only sent for the session on screen, and only while the window is visible.
+- **Processes on demand:**
+  - no `claude` process starts before your first message;
+  - at most *N* processes live at the same time (3 by default);
+  - an idle session is suspended after *X* minutes (10 by default);
+  - the next message resumes it automatically via `--resume`.
+- **MCP à la carte.** For each session, you pick "standard configuration" or "only the checked ones" (`--strict-mcp-config`). On suspension, the whole process group is killed, MCP servers included.
+- **History without loading everything.** The list reads 64 KB at the start and at the end of each file in `~/.claude/projects`; a transcript loads starting from the end.
+- **Built-in memory meter.** The bottom left shows the memory of the Rust core and of each session (CLI + MCP). WebKit processes aren't counted.
 
-## Fonctionnalités
+## Features
 
-- **Conversations par projet.** La barre latérale regroupe les conversations ouvertes et l'historique de `~/.claude/projects`. L'ordre ne bouge qu'en cas de vraie activité, pas quand tu ouvres une conversation.
-- **Nouvelle conversation sans dialogue.** Tu choisis le dossier dans le composer (dossiers récents ou sélecteur natif), tu écris, tu valides. La conversation est créée au premier message.
-- **Markdown en direct.** Seul le dernier bloc est recalculé pendant l'écriture.
-- **Lignes d'activité.** Les appels d'outils consécutifs se replient, par exemple en « 2 fichiers lus, 1 commande ». Pendant qu'ils tournent, la ligne montre l'étape en cours.
-- **Modèle et effort.** Les modèles proposés sont ceux que renvoie le CLI (`initialize`). Il y a 5 niveaux d'effort, appliqués à chaud via `apply_flag_settings`, comme dans Claude Desktop.
-- **Conseiller Opus.** Dans le menu du modèle, par conversation : le modèle choisi travaille et consulte Opus aux moments clés (`--advisor opus` au lancement, `advisorModel` à chaud). Désactivé par défaut.
-- **Monde des agents.** Au-dessus du champ de saisie, chaque Claude de la conversation est un animal (renard pour Opus, chat pour Sonnet, lapin pour Haiku, chiot pour Fable) qui va au poste de ce qu'il fait et le dit dans une bulle ; les sous-agents arrivent par la porte et reviennent faire leur rapport. Coût mesuré, fenêtre visible : environ +2 % de CPU au repos (4 images par seconde quand tout le monde dort, 12 sinon), rien quand la fenêtre est cachée. Se coupe dans les Réglages.
-- **Jauge de contexte.** Le détail par catégorie (`get_context_usage`) est accessible en un clic, ainsi que l'action « Compacter ».
-- **Projets.** On les réordonne en glissant leur en-tête (ou `⌥↑` / `⌥↓`), on les replie d'un clic. Un projet replié garde le signal de ses conversations en cours ou en attente.
-- **Sans dossier.** Une conversation peut se lancer sans projet : le CLI travaille alors dans un dossier dédié de l'app, regroupé sous « Sans dossier ».
-- **Modèle et effort.** Par défaut, ceux que le CLI appliquerait (`model` et `effortLevel` de ses réglages utilisateur, projet et local), sauf choix dans les Réglages. Un choix dans le composer ne vaut que pour la conversation en cours.
-- **Modifications** (`⌘⇧D`). Les fichiers modifiés selon Git, avec leur diff, l'affichage dans le Finder et le rétablissement de la dernière version (la version actuelle part à la corbeille). Les outils `Edit` et `Write` montrent aussi leur diff dans les étapes et dans la demande de permission.
-- **Mentions.** Dans le composer, `/` propose les skills et commandes que le CLI a chargées, avec leur description ; `@` propose les fichiers et dossiers du projet, les autres projets connus, ou le contenu d'un chemin absolu (`@/Users/…`).
-- **Questions et plans.** Quand le modèle pose une question (`AskUserQuestion`), une carte présente les questions une à une : choisir une option, plusieurs, ou écrire sa réponse. Un plan (`ExitPlanMode`) s'affiche en Markdown, à valider ou à refuser.
-- **Actions sur les messages.** Au survol : copier et modifier un message envoyé, copier une réponse ou réessayer.
-- **Copie.** Un bouton au survol sur les blocs de code, les sorties d'outils, les diffs (le nouveau code) et les journaux.
-- **Archives.** Archiver masque une conversation sans toucher à son fichier ; supprimer l'envoie à la corbeille.
-- **Titres automatiques.** Le CLI résume le premier message en un titre court, écrit dans son transcript : il reste à la réouverture et se retrouve dans Claude Code. En cas d'échec, le début du message sert de titre.
-- **Artefacts** (`⌘⇧A`). Les pages publiées par Claude s'ouvrent dans le panneau, sans session claude.ai quand le fichier HTML est encore là, et sur claude.ai sinon. Le bouton n'apparaît que pour une conversation qui en a. On y change d'artefact, recharge, copie le lien et supprime après confirmation.
-- **Simulateur iOS** (`⌘⇧M`). L'écran en direct d'un simulateur dans le panneau de droite : toucher, glisser, gestes depuis les bords (accueil, retour, centre de contrôle) et clavier physique. Une capture se joint au message en un clic. On y démarre et éteint l'appareil, et on passe du clair au sombre. Le pont (`helper/sim-bridge.swift`) ne tourne que pendant que l'onglet est affiché ou que Claude s'en sert, et n'encode une image que si l'écran a changé.
-- **Claude pilote le simulateur.** Un outil `mcp__ios-simulator__control` lui permet de voir l'écran, toucher, glisser, écrire, revenir à l'accueil, ouvrir une URL et démarrer un appareil. Chaque action passe par la permission habituelle et le panneau s'ouvre sur l'appareil concerné. Par défaut, l'outil vise l'appareil du panneau ou le seul démarré, jamais un appareil au hasard. Il passe par le canal `stream-json` déjà ouvert : aucun processus de plus par conversation, et le CLI ne charge sa définition que s'il s'en sert. Un interrupteur par conversation se trouve dans l'onglet Serveurs.
-- **Navigateur intégré** (`⌘⇧B`). C'est une vraie WKWebView placée dans le panneau de droite, sans accès à l'IPC de l'app. Elle s'écarte quand un dialogue ou un menu passe devant. Un lien `localhost` dans une réponse s'y ouvre.
-- **Serveurs** (`⌘⇧S`) :
-  - les serveurs de dev viennent de `.claude/launch.json` (même format que Desktop) et des scripts `dev`, `start`, `serve`… de `package.json` ;
-  - tu peux les démarrer et les arrêter, chacun dans son propre groupe de processus ;
-  - leurs journaux sont visibles en direct, et l'URL locale détectée s'ouvre dans le navigateur intégré ;
-  - l'état des serveurs MCP de la conversation s'affiche aussi, avec activation, désactivation et reconnexion.
-- **Réglages en sections** (`⌘,`) : Général, Performance, Serveurs MCP et À propos. Chaque changement est enregistré automatiquement.
+- **Conversations by project.** The sidebar groups the open conversations and the history from `~/.claude/projects`. The order only changes on real activity, not when you open a conversation.
+- **New conversation without a dialog.** You pick the folder in the composer (recent folders or the native picker), type, and send. The conversation is created on the first message.
+- **Live Markdown.** Only the last block is recomputed while text is being written.
+- **Activity lines.** Consecutive tool calls collapse, for example into "2 files read, 1 command". While they run, the line shows the current step.
+- **Model and effort.** The models offered are the ones the CLI returns (`initialize`). There are 5 effort levels, applied live via `apply_flag_settings`, as in Claude Desktop.
+- **Opus advisor.** In the model menu, per conversation: the chosen model does the work and consults Opus at key moments (`--advisor opus` at launch, `advisorModel` live). Off by default.
+- **Agent world.** Above the input field, each Claude in the conversation is an animal (fox for Opus, cat for Sonnet, rabbit for Haiku, puppy for Fable) that walks to the station of what it is doing and says so in a bubble; subagents come in through the door and come back to report. Measured cost, window visible: about +2% CPU at rest (4 frames per second when everyone is asleep, 12 otherwise), nothing when the window is hidden. Can be turned off in Settings.
+- **Context gauge.** The breakdown by category (`get_context_usage`) is one click away, along with the "Compact" action.
+- **Projects.** Reorder them by dragging their header (or `⌥↑` / `⌥↓`), collapse them with a click. A collapsed project still shows the signal of its running or waiting conversations.
+- **No folder.** A conversation can start without a project: the CLI then works in a dedicated app folder, grouped under "No folder".
+- **Model and effort.** By default, the ones the CLI would apply (`model` and `effortLevel` from its user, project and local settings), unless chosen in Settings. A choice made in the composer only applies to the current conversation.
+- **Changes** (`⌘⇧D`). The files changed according to Git, with their diff, reveal in Finder, and restore to the last version (the current version goes to the Trash). The `Edit` and `Write` tools also show their diff in the steps and in the permission request.
+- **Mentions.** In the composer, `/` suggests the skills and commands the CLI has loaded, with their description; `@` suggests the project's files and folders, the other known projects, or the contents of an absolute path (`@/Users/…`).
+- **Questions and plans.** When the model asks a question (`AskUserQuestion`), a card shows the questions one by one: pick one option, several, or write your own answer. A plan (`ExitPlanMode`) is shown as Markdown, to approve or reject.
+- **Message actions.** On hover: copy and edit a sent message, copy a reply or retry.
+- **Copy.** A button on hover over code blocks, tool outputs, diffs (the new code) and logs.
+- **Archives.** Archiving hides a conversation without touching its file; deleting sends it to the Trash.
+- **Automatic titles.** The CLI sums up the first message as a short title, written to its transcript: it stays when the conversation is reopened and shows up in Claude Code. If that fails, the start of the message is used as the title.
+- **Artifacts** (`⌘⇧A`). Pages published by Claude open in the panel, without a claude.ai session while the HTML file is still there, and on claude.ai otherwise. The button only shows for a conversation that has some. You can switch artifact, reload, copy the link, and delete after confirmation.
+- **iOS Simulator** (`⌘⇧M`). The live screen of a simulator in the right panel: tap, drag, edge gestures (home, back, Control Center) and physical keyboard. A screenshot attaches to the message in one click. You can boot and shut down the device, and switch between light and dark. The bridge (`helper/sim-bridge.swift`) only runs while the tab is shown or Claude is using it, and only encodes a frame when the screen has changed.
+- **Claude drives the simulator.** A `mcp__ios-simulator__control` tool lets it see the screen, tap, drag, type, go home, open a URL and boot a device. Each action goes through the usual permission, and the panel opens on the device concerned. By default, the tool targets the panel's device or the only booted one, never a device picked at random. It goes through the `stream-json` channel already open: no extra process per conversation, and the CLI only loads its definition if it uses it. A per-conversation switch is in the Servers tab.
+- **Built-in browser** (`⌘⇧B`). A real WKWebView placed in the right panel, with no access to the app's IPC. It moves out of the way when a dialog or menu comes in front. A `localhost` link in a reply opens in it.
+- **Servers** (`⌘⇧S`):
+  - dev servers come from `.claude/launch.json` (same format as Desktop) and from the `dev`, `start`, `serve`… scripts of `package.json`;
+  - you can start and stop them, each in its own process group;
+  - their logs are shown live, and the local URL detected opens in the built-in browser;
+  - the state of the conversation's MCP servers is shown too, with enable, disable and reconnect.
+- **Settings in sections** (`⌘,`): General, Performance, MCP servers and About. Every change is saved automatically.
+- **Languages.** The app is in English by default and also speaks French: **Settings → General → Language** (English, Français, or System to follow macOS).
 
-## Utilisation
+## Usage
 
-| Action | Comment |
+| Action | How |
 |---|---|
-| Nouvelle conversation | `⌘N`, l'icône en haut de la barre latérale, ou le `+` d'un projet |
-| Rechercher | `⌘K` |
-| Envoyer / nouvelle ligne | `Entrée` / `Maj+Entrée` |
-| Interrompre | `Échap` |
-| Navigateur / serveurs / simulateur / artefacts | `⌘⇧B` / `⌘⇧S` / `⌘⇧M` / `⌘⇧A` |
-| Réglages | `⌘,` |
-| Libérer la RAM d'une conversation | Menu `⋯` → « Suspendre le processus » (la conversation reste ouverte) |
+| New conversation | `⌘N`, the icon at the top of the sidebar, or a project's `+` |
+| Search | `⌘K` |
+| Send / new line | `Return` / `Shift+Return` |
+| Interrupt | `Esc` |
+| Browser / servers / simulator / artifacts | `⌘⇧B` / `⌘⇧S` / `⌘⇧M` / `⌘⇧A` |
+| Settings | `⌘,` |
+| Free a conversation's RAM | `⋯` menu → "Suspend process" (the conversation stays open) |
 
 ## Architecture
 
 ```
 src-tauri/src/
-  hub.rs        sessions, processus claude, protocole stream-json, permissions,
-                coalescence du streaming, superviseur (suspension auto)
-  protocol.rs   traduction des messages du CLI en événements UI compacts
-  history.rs    lecture partielle des transcripts ~/.claude/projects
-  mcp.rs        liste des serveurs MCP et écriture d'un --mcp-config restreint
-  metrics.rs    RAM/CPU par session (arbre de processus)
-  shellenv.rs   PATH du shell de login (pour claude, npx, uv…)
-  artifacts.rs  aperçu local et suppression des artefacts
-  simulator.rs  simulateurs iOS (simctl) et flux du pont helper/sim-bridge.swift
-  simulator_tool.rs  outil MCP qui laisse Claude piloter le simulateur
-  commands.rs   commandes Tauri
+  hub.rs        sessions, claude processes, stream-json protocol, permissions,
+                streaming coalescing, supervisor (auto suspension)
+  protocol.rs   turns CLI messages into compact UI events
+  history.rs    partial reading of the ~/.claude/projects transcripts
+  mcp.rs        MCP server list and writing of a restricted --mcp-config
+  metrics.rs    RAM/CPU per session (process tree)
+  shellenv.rs   login shell PATH (for claude, npx, uv…)
+  artifacts.rs  local preview and deletion of artifacts
+  simulator.rs  iOS simulators (simctl) and the helper/sim-bridge.swift stream
+  simulator_tool.rs  MCP tool that lets Claude drive the simulator
+  i18n.rs       language of the messages sent by the Rust core
+  commands.rs   Tauri commands
 src/
-  main.ts       sidebar, en-tête, permissions, dialogues, métriques
-  transcript.ts modèle par session + rendu DOM
+  main.ts       sidebar, header, permissions, dialogs, metrics
+  transcript.ts per-session model + DOM rendering
   markdown.ts   marked + DOMPurify
+  i18n.ts       t() and tp(): source strings in English, translations in locales/
 ```
 
-## Limites actuelles
+## Current limitations
 
-- Ces requêtes de contrôle reçoivent une réponse d'erreur pour ne jamais bloquer le CLI :
-  - `hook_callback` (hooks définis par un SDK) ;
-  - `elicitation` (formulaires MCP) ;
-  - `mcp_message` (serveurs MCP SDK, sauf l'outil simulateur).
-- Pas encore de glisser-déposer d'images (une image se joint par mention `@`), ni de partage d'une seule instance de chaque serveur MCP entre sessions.
-- Le navigateur intégré sert à l'aperçu. Claude ne peut pas encore le piloter : il faudrait l'exposer au CLI comme serveur MCP.
-- Le simulateur passe par les frameworks privés d'Xcode (CoreSimulator, SimulatorKit), testés avec Xcode 27 et iOS 27. Un autre Xcode peut les changer : le pont tourne dans son propre processus, l'app ne plante donc pas et l'onglet affiche une erreur. La rotation n'est pas gérée.
-- Claude écrit au simulateur en frappant de vraies touches, sur un appareil en français (AZERTY) ou en anglais américain (QWERTY, pas encore essayé sur un appareil). Ailleurs, ou pour un caractère absent du clavier comme « É », il colle le texte, et iOS demande alors une autorisation que Claude doit accepter.
-- L'aperçu local d'un artefact tourne sans son environnement claude.ai : pas de capacités `window.claude.*` ni de données partagées, et `fetch` ne lit pas les fichiers voisins. Le bouton « Ouvrir sur claude.ai » donne la vraie page.
-- Seul l'outil du CLI sait supprimer un artefact : l'interface lance pour cela un petit processus Haiku à part, limité à cette seule adresse. La liste ne montre que les artefacts de la conversation ; « Tous mes artefacts » ouvre la galerie sur claude.ai.
-- La webview enfant utilise l'API `unstable` de Tauri 2 (`Window::add_child`).
-- Le flux de permission `can_use_tool` est implémenté d'après le code de l'Agent SDK. Les trois choix (Autoriser, Toujours autoriser, Refuser) sont testés de bout en bout avec le faux CLI.
-- Le vrai CLI est testé jusqu'à la réponse de limite d'utilisation : `init` (31 outils), bannière `rate_limit_event`, résultat en erreur. Un vrai tour de modèle avec outils n'a pas pu être exécuté, car la limite hebdomadaire était atteinte.
+- These control requests get an error response so they never block the CLI:
+  - `hook_callback` (hooks defined by an SDK);
+  - `elicitation` (MCP forms);
+  - `mcp_message` (SDK MCP servers, except the simulator tool).
+- No image drag and drop yet (an image is attached with an `@` mention), and no sharing of a single instance of each MCP server across sessions.
+- The built-in browser is for previewing. Claude can't drive it yet: it would have to be exposed to the CLI as an MCP server.
+- The simulator relies on Xcode's private frameworks (CoreSimulator, SimulatorKit), tested with Xcode 27 and iOS 27. Another Xcode may change them: the bridge runs in its own process, so the app doesn't crash and the tab shows an error. Rotation isn't supported.
+- Claude types into the simulator by pressing real keys, on a device set to French (AZERTY) or US English (QWERTY, not tried on a device yet). Elsewhere, or for a character missing from the keyboard such as "É", it pastes the text, and iOS then asks for a permission that Claude has to accept.
+- The local preview of an artifact runs without its claude.ai environment: no `window.claude.*` capabilities or shared data, and `fetch` can't read neighboring files. The "Open on claude.ai" button gives the real page.
+- Only the CLI's tool can delete an artifact: to do so, the interface starts a small separate Haiku process, restricted to that one address. The list only shows the conversation's artifacts; "All my artifacts" opens the gallery on claude.ai.
+- The child webview uses Tauri 2's `unstable` API (`Window::add_child`).
+- The `can_use_tool` permission flow is implemented from the Agent SDK code. The three choices (Allow, Always allow, Deny) are tested end to end with the fake CLI.
+- The real CLI is tested up to the usage-limit response: `init` (31 tools), `rate_limit_event` banner, error result. A real model turn with tools couldn't be run, because the weekly limit had been reached.
 
-## Crédits
+## Credits
 
-- Créatures du monde des agents : [Free Pets Pack](https://frakassets.itch.io/free-pets-pack) par Frakassets, sous licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Seuls le renard, le chat, le lapin, le chiot et le hérisson sont repris, en 48 px vue de côté (`src/assets/critters/`).
+- Agent world creatures: [Free Pets Pack](https://frakassets.itch.io/free-pets-pack) by Frakassets, under the [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) license. Only the fox, cat, rabbit, puppy and hedgehog are used, at 48 px in side view (`src/assets/critters/`).

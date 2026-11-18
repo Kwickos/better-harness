@@ -1,13 +1,14 @@
 import type { Artifact, CliDefaults, ModelInfo, ToolResultEv } from "./api";
 import type { IconName } from "./icons";
+import { t } from "./i18n";
 
-export const DELETE_NOTE = "Elle part à la corbeille et disparaît aussi de Claude Code.";
+export const DELETE_NOTE = t("It goes to the Trash and also disappears from Claude Code.");
 
 export const SIM_TOOL = "mcp__ios-simulator__control";
-/** L'outil servi par l'app pour montrer des fichiers dans la conversation (src-tauri/src/files_tool.rs). */
+/** The tool the app serves to show files in the conversation (src-tauri/src/files_tool.rs). */
 export const FILES_TOOL = "mcp__harness__send_files";
 
-/** Les fichiers que Claude veut montrer, et la ligne qui les accompagne. */
+/** The files Claude wants to show, and the line that goes with them. */
 export function sentFiles(input: string): { files: string[]; caption: string } {
   let a: { files?: unknown; caption?: unknown };
   try {
@@ -19,7 +20,7 @@ export function sentFiles(input: string): { files: string[]; caption: string } {
   return { files: files.slice(0, 20), caption: typeof a.caption === "string" ? a.caption.trim() : "" };
 }
 
-/** Ce que Claude demande au simulateur, en clair : « toucher 120, 340 · iPhone 17e ». */
+/** What Claude asks the simulator, in plain words: "tap 120, 340 · iPhone 17e". */
 export function simulatorAction(input: string): string {
   let a: { action?: string; device?: string; x?: number; y?: number; x2?: number; y2?: number; text?: string };
   try {
@@ -28,15 +29,15 @@ export function simulatorAction(input: string): string {
     return "";
   }
   const act: Record<string, string> = {
-    list: "lister les appareils",
-    boot: "démarrer",
-    screenshot: "regarder l'écran",
-    tap: `toucher ${a.x}, ${a.y}`,
-    swipe: `glisser ${a.x}, ${a.y} → ${a.x2}, ${a.y2}`,
-    type: `écrire « ${a.text ?? ""} »`,
-    key: `touche ${a.text ?? ""}`,
-    home: "accueil",
-    open_url: `ouvrir ${a.text ?? ""}`,
+    list: t("list devices"),
+    boot: t("boot"),
+    screenshot: t("look at the screen"),
+    tap: t("tap {x}, {y}", { x: String(a.x), y: String(a.y) }),
+    swipe: t("swipe {x}, {y} → {x2}, {y2}", { x: String(a.x), y: String(a.y), x2: String(a.x2), y2: String(a.y2) }),
+    type: t("type “{text}”", { text: a.text ?? "" }),
+    key: t("key {text}", { text: a.text ?? "" }),
+    home: t("home"),
+    open_url: t("open {text}", { text: a.text ?? "" }),
   };
   const what = act[a.action ?? ""] ?? a.action ?? "";
   return a.device ? `${what} · ${a.device}` : what;
@@ -44,7 +45,7 @@ export function simulatorAction(input: string): string {
 
 const fileBase = (path: string) => path.split("/").pop() ?? path;
 
-/** Ce que Claude demande à l'outil `Artifact`, en clair : « publier rapport.html ». */
+/** What Claude asks the `Artifact` tool, in plain words: "publish report.html". */
 export function artifactAction(input: string): string {
   let a: { action?: string; title?: string; file_path?: string; url?: string };
   try {
@@ -54,14 +55,14 @@ export function artifactAction(input: string): string {
   }
   const name = a.title ?? (a.file_path ? fileBase(a.file_path) : "");
   const act: Record<string, string> = {
-    publish: `publier ${name}`.trim(),
-    read: "lire un artefact",
-    list: "lister les artefacts",
-    delete: "supprimer un artefact",
-    open: "ouvrir un artefact",
-    quickstart: "préparer un artefact",
-    pin: "épingler un artefact",
-    unpin: "désépingler un artefact",
+    publish: t("publish {name}", { name }).trim(),
+    read: t("read an artifact"),
+    list: t("list artifacts"),
+    delete: t("delete an artifact"),
+    open: t("open an artifact"),
+    quickstart: t("prepare an artifact"),
+    pin: t("pin an artifact"),
+    unpin: t("unpin an artifact"),
   };
   return act[a.action ?? "publish"] ?? a.action ?? "";
 }
@@ -74,18 +75,18 @@ function deletedArtifacts(): string[] {
     return [];
   }
 }
-/** Le transcript garde la publication : sans cette liste, l'artefact supprimé reviendrait à sa relecture. */
+/** The transcript keeps the publish: without this list, a deleted artifact would come back when it is replayed. */
 export function rememberDeletedArtifact(url: string) {
   try {
     localStorage.setItem(DELETED_KEY, JSON.stringify([...deletedArtifacts().filter((x) => x !== url), url].slice(-500)));
   } catch {
-    /* stockage indisponible : l'artefact réapparaîtrait seulement à la relecture */
+    /* storage unavailable: the artifact would only reappear on replay */
   }
 }
 
 /**
- * Tient la liste à jour d'après un résultat de l'outil `Artifact`, le plus récent en tête.
- * Renvoie l'adresse de l'artefact à montrer, s'il y en a un.
+ * Keeps the list up to date from an `Artifact` tool result, most recent first.
+ * Returns the URL of the artifact to show, if any.
  */
 export function updateArtifacts(list: Artifact[], input: string, ev: Pick<ToolResultEv, "artifact" | "isError">): string | null {
   if (ev.isError) return null;
@@ -98,7 +99,7 @@ export function updateArtifacts(list: Artifact[], input: string, ev: Pick<ToolRe
   const action = a.action ?? "publish";
   if (action === "open") return a.url ?? ev.artifact?.url ?? null;
   if (action === "delete") {
-    // Avec `path`, seule une pièce jointe de l'artefact disparaît.
+    // With `path`, only one of the artifact's attachments goes away.
     const at = a.path ? -1 : list.findIndex((x) => x.url === a.url);
     if (at >= 0) list.splice(at, 1);
     return null;
@@ -107,31 +108,31 @@ export function updateArtifacts(list: Artifact[], input: string, ev: Pick<ToolRe
   const { url, title, path } = ev.artifact;
   const at = list.findIndex((x) => x.url === url);
   const known = at >= 0 ? list.splice(at, 1)[0] : undefined;
-  list.unshift({ url, title: title ?? a.title ?? known?.title ?? (path ? fileBase(path) : "Artefact"), path: path ?? known?.path ?? null });
+  list.unshift({ url, title: title ?? a.title ?? known?.title ?? (path ? fileBase(path) : t("Artifact")), path: path ?? known?.path ?? null });
   return url;
 }
 
 export const EFFORTS: { id: string; label: string }[] = [
-  { id: "low", label: "Bas" },
-  { id: "medium", label: "Moyen" },
-  { id: "high", label: "Élevé" },
-  { id: "xhigh", label: "Très élevé" },
-  { id: "max", label: "Max" },
+  { id: "low", label: t("Low") },
+  { id: "medium", label: t("Medium") },
+  { id: "high", label: t("High") },
+  { id: "xhigh", label: t("Very high") },
+  { id: "max", label: t("Max") },
 ];
 export const effortLabel = (id: string | null | undefined) => EFFORTS.find((e) => e.id === id)?.label ?? "";
 
 export const MODES: { id: string; label: string; icon: IconName }[] = [
-  { id: "default", label: "Demander", icon: "hand" },
-  { id: "acceptEdits", label: "Modifications auto", icon: "pencil" },
-  { id: "plan", label: "Plan", icon: "map" },
-  { id: "auto", label: "Auto", icon: "magic" },
-  { id: "bypassPermissions", label: "Sans demander", icon: "warning" },
+  { id: "default", label: t("Ask"), icon: "hand" },
+  { id: "acceptEdits", label: t("Accept edits"), icon: "pencil" },
+  { id: "plan", label: t("Plan"), icon: "map" },
+  { id: "auto", label: t("Auto"), icon: "magic" },
+  { id: "bypassPermissions", label: t("Don't ask"), icon: "warning" },
 ];
 export const modeOf = (id: string) => MODES.find((m) => m.id === id) ?? MODES[0];
 
-/** Liste de repli tant que le CLI n'a pas fourni la sienne (réponse à `initialize`). */
+/** Fallback list until the CLI has sent its own (reply to `initialize`). */
 const FALLBACK: ModelInfo[] = [
-  { value: "default", displayName: "Par défaut" },
+  { value: "default", displayName: t("Default") },
   { value: "opus", displayName: "Opus" },
   { value: "sonnet", displayName: "Sonnet" },
   { value: "haiku", displayName: "Haiku" },
@@ -154,7 +155,7 @@ export function rememberModels(list: ModelInfo[]) {
   try {
     localStorage.setItem("bh.models", JSON.stringify(list));
   } catch {
-    /* stockage indisponible : la liste reste en mémoire */
+    /* storage unavailable: the list stays in memory */
   }
 }
 
@@ -164,7 +165,7 @@ export const setCliDefaults = (d: CliDefaults) => {
 };
 
 const cleanName = (name: string) => name.replace(/\s*\(.*\)\s*$/, "");
-/** « claude-opus-5-5 » → « Opus 5.5 ». */
+/** "claude-opus-5-5" → "Opus 5.5". */
 function nameFromId(id: string | null | undefined): string | null {
   const m = id ? /claude-([a-z]+)-(\d+)-(\d+)/.exec(id) : null;
   return m ? `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}` : null;
@@ -173,16 +174,16 @@ const modelName = (m: ModelInfo) => nameFromId(m.resolvedModel) ?? cleanName(m.d
 const defaultResolved = () => models().find((m) => m.value === "default")?.resolvedModel ?? null;
 const findModel = (id: string) => models().find((m) => m.value === id || m.resolvedModel === id);
 const explicit = (id: string | null | undefined) => (id && id !== "default" ? id : null);
-/** Le modèle fixé dans les réglages du CLI, s'il y en a un. */
+/** The model set in the CLI settings, if any. */
 const cliModel = () => explicit(cli.model);
 
-/** Modèles proposés : les alias principaux (Opus, Sonnet, Haiku…), un seul par famille. */
+/** Models offered: the main aliases (Opus, Sonnet, Haiku…), one per family. */
 export const modelChoices = () =>
   models()
     .filter((m) => m.value !== "default" && !m.value.startsWith("claude-"))
     .map((m) => ({ ...m, displayName: modelName(m) }));
 
-/** Sans choix explicite, c'est le modèle que le CLI utilisera qui est coché. */
+/** Without an explicit choice, the model the CLI will use is the one checked. */
 export function isCurrentModel(m: ModelInfo, id: string | null | undefined): boolean {
   const wanted = explicit(id) ?? cliModel();
   if (wanted) return m.value === wanted || m.resolvedModel === wanted;
@@ -201,10 +202,10 @@ export function prettyModel(id: string | null | undefined, resolved?: string | n
   if (running) return running;
   const configured = cliModel();
   if (configured) return nameOf(configured);
-  return nameFromId(defaultResolved()) ?? "Par défaut";
+  return nameFromId(defaultResolved()) ?? t("Default");
 }
 
-/** Niveaux d'effort que le modèle accepte ; aucun s'il n'en gère pas. */
+/** Effort levels the model accepts; none if it doesn't support effort. */
 export function effortLevels(id: string | null | undefined): { id: string; label: string }[] {
   const wanted = explicit(id) ?? cliModel();
   const m = wanted ? findModel(wanted) : models().find((x) => x.value === "default");
@@ -213,5 +214,5 @@ export function effortLevels(id: string | null | undefined): { id: string; label
   return allowed?.length ? EFFORTS.filter((e) => allowed.includes(e.id)) : EFFORTS;
 }
 
-/** L'effort réellement appliqué : le choix fait ici, sinon celui des réglages du CLI. */
+/** The effort actually applied: the choice made here, otherwise the one from the CLI settings. */
 export const effectiveEffort = (chosen: string | null | undefined) => chosen || cli.effort;

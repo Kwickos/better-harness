@@ -1,6 +1,7 @@
-// Bouton « Copier » des blocs de code, sorties d'outils, diffs et journaux.
-// Il est ajouté après le nettoyage du Markdown : DOMPurify interdit `button` dans le texte du modèle.
+// "Copy" button for code blocks, tool output, diffs and logs.
+// It is added after the Markdown is sanitized: DOMPurify forbids `button` in the model's text.
 import { invoke } from "@tauri-apps/api/core";
+import { t } from "./i18n";
 import { icon } from "./icons";
 import { iconIn } from "./motion";
 
@@ -13,12 +14,12 @@ async function writeClipboard(text: string): Promise<boolean> {
       () => false,
     );
   }
-  // Hors de l'app (prévisualisation dans un navigateur).
+  // Outside the app (preview in a browser).
   try {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // Sans contexte sécurisé, l'API est absente : on repasse par une sélection.
+    // Without a secure context the API is missing: fall back to a selection.
     const before = document.activeElement as HTMLElement | null;
     const area = document.createElement("textarea");
     area.value = text;
@@ -34,7 +35,7 @@ async function writeClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function copyButton(getText: () => string, label = "Copier", extraClass = "code-copy"): HTMLButtonElement {
+export function copyButton(getText: () => string, label = t("Copy"), extraClass = "code-copy"): HTMLButtonElement {
   const b = document.createElement("button");
   b.type = "button";
   b.className = `icon-btn ${extraClass}`;
@@ -45,7 +46,7 @@ export function copyButton(getText: () => string, label = "Copier", extraClass =
   b.addEventListener("click", async (e) => {
     e.stopPropagation();
     const ok = await writeClipboard(getText());
-    const done = ok ? "Copié" : "Copie impossible";
+    const done = ok ? t("Copied") : t("Couldn't copy");
     b.title = done;
     b.setAttribute("aria-label", done);
     b.classList.toggle("is-done", ok);
@@ -65,8 +66,8 @@ export function copyButton(getText: () => string, label = "Copier", extraClass =
 }
 
 /**
- * Enveloppe un bloc avec son bouton. La barre est collante et sans hauteur : le bouton reste
- * visible dans un long bloc, et ne défile pas avec un bloc qui déborde en largeur.
+ * Wraps a block with its button. The bar is sticky and has no height: the button stays
+ * visible in a long block, and doesn't scroll with a block that overflows horizontally.
  */
 export function withCopy(block: HTMLElement, getText: () => string = () => block.textContent ?? "", label?: string): HTMLElement {
   const wrap = document.createElement("div");
@@ -79,14 +80,14 @@ export function withCopy(block: HTMLElement, getText: () => string = () => block
   return wrap;
 }
 
-/** Ajoute le bouton aux blocs de code d'un Markdown déjà rendu et nettoyé. */
+/** Adds the button to the code blocks of Markdown already rendered and sanitized. */
 export function decorateCode(root: HTMLElement) {
   for (const pre of root.querySelectorAll<HTMLElement>("pre")) {
     if (!pre.parentElement?.classList.contains("code-block")) withCopy(pre, () => pre.querySelector("code")?.textContent ?? pre.textContent ?? "");
   }
 }
 
-/** Élément neuf, pas encore dans la page : même enveloppe, sans remplacement. */
+/** New element, not in the page yet: same wrapper, without replacing anything. */
 export function wrapWithCopy(block: HTMLElement, getText: () => string = () => block.textContent ?? "", label?: string): HTMLElement {
   const holder = document.createElement("div");
   holder.append(block);

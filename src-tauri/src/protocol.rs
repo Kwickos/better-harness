@@ -1,16 +1,17 @@
-//! Traduction des messages stream-json du CLI claude en événements UI compacts.
-//! Formats relevés sur le CLI 2.1.319 et sur l'Agent SDK embarqué dans Claude Desktop.
+//! Translation of the claude CLI's stream-json messages into compact UI events.
+//! Formats observed on CLI 2.1.319 and on the Agent SDK embedded in Claude Desktop.
 
 use crate::events::{ArtifactRef, Block};
+use crate::i18n::tr;
 use serde_json::{json, Value};
 
-/// Taille max d'un résultat d'outil envoyé à l'UI (le reste reste dans le jsonl du CLI).
+/// Max size of a tool result sent to the UI (the rest stays in the CLI's jsonl).
 pub const TOOL_RESULT_MAX: usize = 6_000;
-/// Taille max de l'entrée d'un outil affichée.
+/// Max size of a displayed tool input.
 pub const TOOL_INPUT_MAX: usize = 4_000;
 const EDIT_INPUT_MAX: usize = 32_000;
 
-/// Diff, question, plan ou fichiers joints : l'interface lit ces entrées, elles doivent rester un JSON complet.
+/// Diff, question, plan or attached files: the UI reads these inputs, they must stay complete JSON.
 pub fn tool_input_max(tool: &str) -> usize {
     if matches!(tool, "Edit" | "MultiEdit" | "Write" | "NotebookEdit" | "AskUserQuestion" | "ExitPlanMode" | crate::files_tool::TOOL) {
         EDIT_INPUT_MAX
@@ -36,7 +37,7 @@ fn ceil_boundary(s: &str, mut i: usize) -> usize {
     i
 }
 
-/// Garde le début et la fin d'un texte trop long.
+/// Keeps the start and end of a text that is too long.
 pub fn truncate_middle(s: &str, max: usize) -> (String, bool) {
     if s.len() <= max {
         return (s.to_string(), false);
@@ -44,8 +45,12 @@ pub fn truncate_middle(s: &str, max: usize) -> (String, bool) {
     let head = floor_boundary(s, max * 2 / 3);
     let tail = ceil_boundary(s, s.len() - (max - max * 2 / 3));
     let hidden = tail - head;
+    let (start, end) = (&s[..head], &s[tail..]);
     (
-        format!("{}\n\n… [{} octets masqués] …\n\n{}", &s[..head], hidden, &s[tail..]),
+        tr(
+            format!("{start}\n\n… [{hidden} bytes hidden] …\n\n{end}"),
+            format!("{start}\n\n… [{hidden} octets masqués] …\n\n{end}"),
+        ),
         true,
     )
 }
@@ -64,7 +69,7 @@ pub fn one_line(s: &str, max: usize) -> String {
     }
 }
 
-/// Résumé d'une ligne pour un appel d'outil (commande, fichier, motif…).
+/// One-line summary of a tool call (command, file, pattern…).
 pub fn tool_summary(name: &str, input: &Value) -> String {
     let pick = |k: &str| input.get(k).and_then(Value::as_str).map(str::to_string);
     let s = match name {
@@ -86,7 +91,7 @@ pub fn tool_summary(name: &str, input: &Value) -> String {
     one_line(&s.unwrap_or_default(), 160)
 }
 
-/// Convertit le contenu d'un message assistant en blocs UI.
+/// Converts the content of an assistant message into UI blocks.
 pub fn assistant_blocks(content: &Value) -> Vec<Block> {
     let mut out = Vec::new();
     let Some(arr) = content.as_array() else {
@@ -126,7 +131,7 @@ pub fn assistant_blocks(content: &Value) -> Vec<Block> {
     out
 }
 
-/// L'artefact désigné par le résultat structuré d'un outil (`tool_use_result` en direct, `toolUseResult` dans un transcript).
+/// The artifact a tool's structured result points to (`tool_use_result` live, `toolUseResult` in a transcript).
 pub fn artifact_ref(result: Option<&Value>) -> Option<ArtifactRef> {
     let result = result?;
     let url = result.get("url")?.as_str()?;
@@ -137,7 +142,7 @@ pub fn artifact_ref(result: Option<&Value>) -> Option<ArtifactRef> {
     Some(ArtifactRef { url: url.to_string(), title: text("title"), path: text("path") })
 }
 
-/// Texte d'un bloc tool_result (chaîne ou liste de blocs).
+/// Text of a tool_result block (string or list of blocks).
 pub fn tool_result_text(content: &Value) -> String {
     match content {
         Value::String(s) => s.clone(),
@@ -160,7 +165,7 @@ pub fn tool_result_text(content: &Value) -> String {
     }
 }
 
-/// Texte saisi par l'utilisateur dans un message `user` (hors tool_result).
+/// Text typed by the user in a `user` message (tool_result excluded).
 pub fn user_text(content: &Value) -> Option<String> {
     match content {
         Value::String(s) => Some(s.clone()),
@@ -216,7 +221,7 @@ mod tests {
         let s = "é".repeat(5000);
         let (t, cut) = truncate_middle(&s, 1001);
         assert!(cut);
-        assert!(t.contains("octets masqués"));
+        assert!(t.contains("bytes hidden"));
     }
 
     #[test]
@@ -229,7 +234,7 @@ mod tests {
     fn blocks_from_content() {
         let c = json!([
             {"type":"thinking","thinking":"hmm"},
-            {"type":"text","text":"Salut"},
+            {"type":"text","text":"Hello"},
             {"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a/b.rs"}}
         ]);
         let b = assistant_blocks(&c);
@@ -241,16 +246,16 @@ mod tests {
     }
 
     #[test]
-    fn artefact_lu_dans_le_resultat_structure() {
-        let file = json!({"url":"https://claude.ai/artifact/abc","path":"/tmp/a.html","artifact_id":"x","title":"Repérage"});
+    fn artifact_read_from_structured_result() {
+        let file = json!({"url":"https://claude.ai/artifact/abc","path":"/tmp/a.html","artifact_id":"x","title":"Scouting"});
         assert_eq!(
             artifact_ref(Some(&file)),
-            Some(ArtifactRef { url: "https://claude.ai/artifact/abc".into(), title: Some("Repérage".into()), path: Some("/tmp/a.html".into()) })
+            Some(ArtifactRef { url: "https://claude.ai/artifact/abc".into(), title: Some("Scouting".into()), path: Some("/tmp/a.html".into()) })
         );
-        let from_type = json!({"created_from_type":true,"url":"https://claude.ai/artifact/def","title":"Maquettes"});
+        let from_type = json!({"created_from_type":true,"url":"https://claude.ai/artifact/def","title":"Mockups"});
         assert_eq!(artifact_ref(Some(&from_type)).unwrap().path, None);
-        // Le résultat d'un autre outil n'est pas un artefact.
-        assert_eq!(artifact_ref(Some(&json!({"url":"https://exemple.fr/artifact/abc"}))), None);
+        // Another tool's result is not an artifact.
+        assert_eq!(artifact_ref(Some(&json!({"url":"https://example.com/artifact/abc"}))), None);
         assert_eq!(artifact_ref(Some(&json!({"type":"text","file":{"filePath":"/tmp/a"}}))), None);
         assert_eq!(artifact_ref(None), None);
     }

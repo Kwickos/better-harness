@@ -1,15 +1,16 @@
-//! Gestion des sessions : un processus `claude` (stream-json) par session vivante.
+//! Session management: one `claude` process (stream-json) per live session.
 //!
-//! Optimisations par rapport à Claude Desktop :
-//! - spawn paresseux : aucun processus tant qu'aucun message n'est envoyé ;
-//! - au plus `max_live` processus vivants ; au-delà, ou après `idle_minutes`
-//!   d'inactivité, une session est suspendue (processus arrêté, reprise
-//!   transparente via `--resume`) ;
-//! - kill du groupe de processus entier (CLI + serveurs MCP enfants) ;
-//! - texte en streaming coalescé (≈25 envois/s max) et envoyé uniquement pour la
-//!   session affichée quand la fenêtre est visible.
+//! Optimizations compared with Claude Desktop:
+//! - lazy spawn: no process until a message is sent;
+//! - at most `max_live` live processes; beyond that, or after `idle_minutes`
+//!   of inactivity, a session is suspended (process stopped, transparent
+//!   resume with `--resume`);
+//! - kill of the whole process group (CLI + child MCP servers);
+//! - streamed text coalesced (≈25 sends/s max) and sent only for the
+//!   displayed session while the window is visible.
 
 use crate::events::{McpStatus, SessionInfo, UiEvent};
+use crate::i18n::tr;
 use crate::protocol::{
     assistant_blocks, control_error, control_request, control_success, one_line, tool_result_text,
     truncate_middle, user_message, TOOL_RESULT_MAX,
@@ -29,10 +30,10 @@ use tokio::process::{ChildStdin, Command};
 
 type Stdin = Arc<tokio::sync::Mutex<Option<ChildStdin>>>;
 
-/// Période de coalescence du streaming : 20 rafraîchissements/s suffisent à l'œil.
+/// Streaming coalescing period: 20 refreshes/s are enough for the eye.
 const STREAM_FLUSH: Duration = Duration::from_millis(50);
 const STDERR_LINES: usize = 40;
-/// Liste des commandes : relue au plus toutes les 5 minutes, car il faut lancer le CLI pour l'obtenir.
+/// Command list: reread at most every 5 minutes, since getting it means launching the CLI.
 const COMMANDS_TTL: Duration = Duration::from_secs(300);
 const COMMANDS_TIMEOUT: Duration = Duration::from_secs(25);
 const COMMAND_DESCRIPTION_MAX: usize = 400;
@@ -66,10 +67,10 @@ struct Persisted {
     mcp: Option<Vec<String>>,
     #[serde(default)]
     effort: Option<String>,
-    /// Modèle que Claude consulte aux moments clés (`--advisor`) ; None = pas de conseiller.
+    /// Model Claude consults at key moments (`--advisor`); None = no advisor.
     #[serde(default)]
     advisor: Option<String>,
-    /// Dernière vraie activité (message envoyé/reçu). Ouvrir une conversation ne la change pas.
+    /// Last real activity (message sent/received). Opening a conversation does not change it.
     #[serde(default)]
     last_active_ms: u64,
 }
@@ -124,8 +125,8 @@ impl Session {
             state: state.into(),
             pid: self.proc.as_ref().map(|p| p.pid),
             mcp_label: match &self.p.mcp {
-                None => "tous".into(),
-                Some(v) if v.is_empty() => "aucun".into(),
+                None => tr("all", "tous").into(),
+                Some(v) if v.is_empty() => tr("none", "aucun").into(),
                 Some(v) => v.join(", "),
             },
             effort: self.p.effort.clone(),
@@ -164,7 +165,7 @@ pub struct CreateOpts {
     pub cwd: String,
     pub model: Option<String>,
     pub permission_mode: Option<String>,
-    /// None = config MCP standard ; Some(liste) = uniquement ces serveurs.
+    /// None = standard MCP config; Some(list) = only these servers.
     pub mcp: Option<Vec<String>>,
     pub resume: Option<String>,
     pub title: Option<String>,
@@ -173,7 +174,7 @@ pub struct CreateOpts {
     pub advisor: Option<String>,
 }
 
-/// Assez pour comprendre le sujet : le CLI n'a pas besoin d'un long collage entier pour nommer.
+/// Enough to get the topic: the CLI does not need a whole long paste to name it.
 const TITLE_INPUT_MAX: usize = 2000;
 
 pub struct Hub {
@@ -181,9 +182,9 @@ pub struct Hub {
     sessions: Mutex<HashMap<String, Session>>,
     out: Mutex<Out>,
     pub settings: Mutex<Settings>,
-    /// Identifiants des conversations archivées (transcripts intacts, masqués de la liste).
+    /// IDs of archived conversations (transcripts intact, hidden from the list).
     archived: Mutex<BTreeSet<String>>,
-    /// Commandes du CLI par dossier de travail, avec l'instant où elles ont été lues.
+    /// CLI commands per working folder, with the time they were read.
     commands: Mutex<HashMap<String, (Instant, Value)>>,
     config_dir: PathBuf,
     cache_dir: PathBuf,
@@ -214,13 +215,13 @@ impl Hub {
         })
     }
 
-    // ---------- persistance des sessions ouvertes ----------
+    // ---------- persistence of open sessions ----------
 
     fn open_path(&self) -> PathBuf {
         self.config_dir.join("open-sessions.json")
     }
 
-    /// Recharge les sessions ouvertes au dernier lancement (toutes suspendues).
+    /// Reloads the sessions open at the last launch (all suspended).
     pub fn restore(&self) {
         let Ok(bytes) = std::fs::read(self.open_path()) else { return };
         let Ok(list) = serde_json::from_slice::<Vec<Persisted>>(&bytes) else { return };
@@ -242,7 +243,7 @@ impl Hub {
         Ok(())
     }
 
-    // ---------- sortie vers l'UI ----------
+    // ---------- output to the UI ----------
 
     pub fn set_channel(&self, ch: Channel<UiEvent>) {
         self.out.lock().unwrap().channel = Some(ch);
@@ -280,7 +281,7 @@ impl Hub {
             .collect()
     }
 
-    // ---------- streaming coalescé ----------
+    // ---------- coalesced streaming ----------
 
     fn push_delta(self: &Arc<Self>, sid: &str, text: &str, thinking: bool) {
         let mut out = self.out.lock().unwrap();
@@ -328,7 +329,7 @@ impl Hub {
         self.out.lock().unwrap().streams.remove(sid);
     }
 
-    /// Renvoie tout le texte en cours de la session affichée (après changement de focus).
+    /// Resends all the pending text of the displayed session (after a focus change).
     fn resend_stream(self: &Arc<Self>) {
         let sid = {
             let mut out = self.out.lock().unwrap();
@@ -357,13 +358,13 @@ impl Hub {
         }
     }
 
-    // ---------- cycle de vie ----------
+    // ---------- lifecycle ----------
 
     pub fn create(&self, o: CreateOpts) -> Result<SessionInfo, String> {
         let cwd = o.cwd.trim().trim_end_matches('/').to_string();
         let cwd = if cwd.is_empty() { "/".to_string() } else { cwd };
         if !std::path::Path::new(&cwd).is_dir() {
-            return Err(format!("Dossier introuvable : {cwd}"));
+            return Err(tr(format!("Folder not found: {cwd}"), format!("Dossier introuvable : {cwd}")));
         }
         let (model, mode, mcp, effort) = {
             let mut s = self.settings.lock().unwrap();
@@ -383,13 +384,13 @@ impl Hub {
         };
         let sid = uuid::Uuid::new_v4().to_string();
         let title_auto = o.title.is_none();
-        // Rouvrir une conversation ne doit pas la faire remonter : on garde la date du transcript.
+        // Reopening a conversation must not move it up: keep the transcript's date.
         let last_active_ms = o.resume.as_deref().and_then(crate::history::mtime_ms).unwrap_or(0);
         let p = Persisted {
             sid: sid.clone(),
             cli_id: o.resume,
             cwd,
-            title: o.title.unwrap_or_else(|| "Nouvelle session".into()),
+            title: o.title.unwrap_or_else(|| tr("New session", "Nouvelle session").into()),
             model,
             permission_mode: mode,
             mcp,
@@ -405,11 +406,11 @@ impl Hub {
         Ok(info)
     }
 
-    /// Retourne le stdin d'un processus vivant, en le lançant si besoin.
+    /// Returns the stdin of a live process, launching it if needed.
     async fn ensure_live(self: &Arc<Self>, sid: &str) -> Result<Stdin, String> {
         let lock = {
             let map = self.sessions.lock().unwrap();
-            let s = map.get(sid).ok_or("Session inconnue")?;
+            let s = map.get(sid).ok_or(tr("Unknown session", "Session inconnue"))?;
             if let Some(p) = &s.proc {
                 return Ok(p.stdin.clone());
             }
@@ -420,7 +421,7 @@ impl Hub {
             return Ok(stdin);
         }
 
-        // Limite de processus vivants : on suspend la session inactive la plus ancienne.
+        // Live process limit: suspend the oldest idle session.
         let (max_live, partial, claude_path, all_tools) = {
             let s = self.settings.lock().unwrap();
             (s.max_live.max(1), s.partial_messages, s.claude_path.clone(), s.all_tools)
@@ -438,15 +439,15 @@ impl Hub {
             }
         };
         if let Some(v) = victim {
-            self.suspend(&v, "limite de sessions actives");
+            self.suspend(&v, tr("active session limit", "limite de sessions actives"));
         }
 
         let claude = crate::shellenv::resolve_claude(claude_path.as_deref())
             .await
-            .ok_or("Binaire `claude` introuvable : indique son chemin dans les réglages.")?;
+            .ok_or(tr("`claude` binary not found: set its path in the settings.", "Binaire `claude` introuvable : indique son chemin dans les réglages."))?;
         let path_env = crate::shellenv::path().await;
 
-        let p = self.sessions.lock().unwrap().get(sid).map(|s| s.p.clone()).ok_or("Session fermée")?;
+        let p = self.sessions.lock().unwrap().get(sid).map(|s| s.p.clone()).ok_or(tr("Session closed", "Session fermée"))?;
         let mut cmd = Command::new(&claude);
         cmd.args([
             "-p",
@@ -480,7 +481,7 @@ impl Hub {
         }
         if let Some(names) = &p.mcp {
             let file = self.cache_dir.join(format!("mcp-{sid}.json"));
-            crate::mcp::write_config(&p.cwd, names, &file).map_err(|e| format!("Config MCP : {e}"))?;
+            crate::mcp::write_config(&p.cwd, names, &file).map_err(|e| tr(format!("MCP config: {e}"), format!("Config MCP : {e}")))?;
             cmd.arg("--strict-mcp-config").arg("--mcp-config").arg(&file);
         }
         if crate::simulator::available() {
@@ -490,7 +491,7 @@ impl Hub {
         cmd.arg("--append-system-prompt").arg(crate::files_tool::PROMPT);
         cmd.current_dir(&p.cwd)
             .env("PATH", path_env)
-            // En mode SDK, le CLI ne propose l'outil `Artifact` que si l'hôte le demande.
+            // In SDK mode, the CLI offers the `Artifact` tool only if the host asks for it.
             .env("CLAUDE_CODE_ARTIFACT", "1")
             .env_remove("CLAUDECODE")
             .env_remove("CLAUDE_CODE_ENTRYPOINT")
@@ -501,17 +502,17 @@ impl Hub {
             .kill_on_drop(true)
             .process_group(0);
 
-        let mut child = cmd.spawn().map_err(|e| format!("Lancement de claude impossible : {e}"))?;
+        let mut child = cmd.spawn().map_err(|e| tr(format!("Could not start claude: {e}"), format!("Lancement de claude impossible : {e}")))?;
         let pid = child.id().unwrap_or(0);
         let gen = self.gen.fetch_add(1, Ordering::Relaxed);
         let stdin: Stdin = Arc::new(tokio::sync::Mutex::new(child.stdin.take()));
         let exited = Arc::new(AtomicBool::new(false));
-        let stdout = child.stdout.take().ok_or("stdout indisponible")?;
-        let stderr = child.stderr.take().ok_or("stderr indisponible")?;
+        let stdout = child.stdout.take().ok_or(tr("stdout unavailable", "stdout indisponible"))?;
+        let stderr = child.stderr.take().ok_or(tr("stderr unavailable", "stderr indisponible"))?;
 
         let stderr_ring = {
             let mut map = self.sessions.lock().unwrap();
-            let s = map.get_mut(sid).ok_or("Session fermée")?;
+            let s = map.get_mut(sid).ok_or(tr("Session closed", "Session fermée"))?;
             s.proc = Some(Proc { pid, gen, stdin: stdin.clone(), exited: exited.clone() });
             s.stopping = false;
             s.stderr.lock().unwrap().clear();
@@ -535,7 +536,7 @@ impl Hub {
                 }
             }
         });
-        // Chien de garde : un CLI muet 20 s après son lancement est signalé (sans être tué).
+        // Watchdog: a CLI silent 20 s after launch is reported (not killed).
         let hub = self.clone();
         let sid_dog = sid.to_string();
         let exited_dog = exited.clone();
@@ -546,9 +547,15 @@ impl Hub {
                 hub.notice(
                     Some(&sid_dog),
                     "warn",
-                    format!(
-                        "Le CLI n'a rien envoyé depuis 20 s (pid {pid}). Si macOS affiche une demande d'accès \
-                         (Documents, Bureau…) pour Better Harness, accepte-la : le processus attend cette réponse.{tail}"
+                    tr(
+                        format!(
+                            "The CLI has sent nothing for 20 s (pid {pid}). If macOS shows an access request \
+                             (Documents, Desktop…) for Better Harness, accept it: the process is waiting for that answer.{tail}"
+                        ),
+                        format!(
+                            "Le CLI n'a rien envoyé depuis 20 s (pid {pid}). Si macOS affiche une demande d'accès \
+                             (Documents, Bureau…) pour Better Harness, accepte-la : le processus attend cette réponse.{tail}"
+                        ),
                     ),
                 );
             }
@@ -598,7 +605,7 @@ impl Hub {
             let mut map = self.sessions.lock().unwrap();
             let Some(s) = map.get_mut(sid) else { return };
             match s.proc.as_ref().map(|p| p.gen) {
-                // Ancien processus (suspendu puis remplacé) : l'état appartient au nouveau.
+                // Old process (suspended then replaced): the state belongs to the new one.
                 Some(current) if current != gen => return,
                 Some(_) => s.proc = None,
                 None => {}
@@ -608,10 +615,11 @@ impl Hub {
             let expected = std::mem::take(&mut s.stopping);
             if !expected && (code != Some(0) || was_busy) {
                 let tail: Vec<String> = s.stderr.lock().unwrap().iter().cloned().collect();
-                Some(format!(
-                    "Le processus claude s'est arrêté (code {}).{}",
-                    code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
-                    if tail.is_empty() { String::new() } else { format!("\n{}", tail.join("\n")) }
+                let code = code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into());
+                let tail = if tail.is_empty() { String::new() } else { format!("\n{}", tail.join("\n")) };
+                Some(tr(
+                    format!("The claude process stopped (code {code}).{tail}"),
+                    format!("Le processus claude s'est arrêté (code {code}).{tail}"),
                 ))
             } else {
                 None
@@ -627,8 +635,8 @@ impl Hub {
         self.emit_session(sid);
     }
 
-    /// Arrête le processus d'une session (fermeture de stdin, puis SIGTERM/SIGKILL
-    /// du groupe). La session reste ouverte et reprendra via --resume.
+    /// Stops a session's process (stdin closed, then SIGTERM/SIGKILL of the
+    /// group). The session stays open and will resume with --resume.
     pub fn suspend(&self, sid: &str, reason: &str) {
         let proc = {
             let mut map = self.sessions.lock().unwrap();
@@ -639,7 +647,14 @@ impl Hub {
             p
         };
         if !reason.is_empty() {
-            self.notice(Some(sid), "info", format!("Processus suspendu ({reason}) ; reprise automatique au prochain message."));
+            self.notice(
+                Some(sid),
+                "info",
+                tr(
+                    format!("Process suspended ({reason}); resumes automatically on the next message."),
+                    format!("Processus suspendu ({reason}) ; reprise automatique au prochain message."),
+                ),
+            );
         }
         tauri::async_runtime::spawn(stop_process(proc));
         self.emit_session(sid);
@@ -651,7 +666,7 @@ impl Hub {
         }
     }
 
-    /// Retire la session et rend son processus, que l'appelant doit arrêter.
+    /// Removes the session and returns its process, which the caller must stop.
     fn remove_session(&self, sid: &str) -> Option<Proc> {
         let proc = self.sessions.lock().unwrap().remove(sid).and_then(|mut s| s.proc.take());
         let _ = std::fs::remove_file(self.cache_dir.join(format!("mcp-{sid}.json")));
@@ -661,14 +676,14 @@ impl Hub {
         proc
     }
 
-    /// Dossier des conversations lancées sans projet : le CLI a toujours besoin d'un dossier de travail.
+    /// Folder for conversations started without a project: the CLI always needs a working folder.
     pub fn scratch_dir(&self) -> Result<String, String> {
         let dir = self.config_dir.join("sans-dossier");
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         Ok(dir.to_string_lossy().into_owned())
     }
 
-    // ---------- commandes du CLI ----------
+    // ---------- CLI commands ----------
 
     fn remember_commands(&self, cwd: &str, commands: &Value) -> Value {
         let list: Vec<Value> = commands
@@ -688,8 +703,8 @@ impl Hub {
         value
     }
 
-    /// Le CLI sait ce qu'il a chargé (skills de l'utilisateur, du projet, des plugins) : on le lui demande,
-    /// sans lui envoyer de message. Une session vivante alimente aussi ce cache à son démarrage.
+    /// The CLI knows what it loaded (user, project and plugin skills): ask it, without
+    /// sending it a message. A live session also fills this cache when it starts.
     pub async fn commands(&self, cwd: &str) -> Result<Value, String> {
         if let Some((at, value)) = self.commands.lock().unwrap().get(cwd) {
             if at.elapsed() < COMMANDS_TTL {
@@ -700,7 +715,7 @@ impl Hub {
             return Ok(json!([]));
         }
         let explicit = self.settings.lock().unwrap().claude_path.clone();
-        let claude = crate::shellenv::resolve_claude(explicit.as_deref()).await.ok_or("CLI claude introuvable.")?;
+        let claude = crate::shellenv::resolve_claude(explicit.as_deref()).await.ok_or(tr("claude CLI not found.", "CLI claude introuvable."))?;
         let mut cmd = Command::new(&claude);
         cmd.args([
             "-p",
@@ -726,10 +741,10 @@ impl Hub {
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true)
         .process_group(0);
-        let mut child = cmd.spawn().map_err(|e| format!("Lancement de claude impossible : {e}"))?;
+        let mut child = cmd.spawn().map_err(|e| tr(format!("Could not start claude: {e}"), format!("Lancement de claude impossible : {e}")))?;
         let pid = child.id().unwrap_or(0);
-        let mut stdin = child.stdin.take().ok_or("stdin indisponible")?;
-        let stdout = child.stdout.take().ok_or("stdout indisponible")?;
+        let mut stdin = child.stdin.take().ok_or(tr("stdin unavailable", "stdin indisponible"))?;
+        let stdout = child.stdout.take().ok_or(tr("stdout unavailable", "stdout indisponible"))?;
         let read = async {
             let request = json!({ "type": "control_request", "request_id": "commands", "request": { "subtype": "initialize" } });
             stdin.write_all(format!("{request}\n").as_bytes()).await.map_err(|e| e.to_string())?;
@@ -740,16 +755,16 @@ impl Hub {
                     return Ok(v["response"]["response"]["commands"].clone());
                 }
             }
-            Err("Le CLI s'est arrêté sans répondre.".to_string())
+            Err(tr("The CLI stopped without answering.", "Le CLI s'est arrêté sans répondre.").to_string())
         };
         let answer = tokio::time::timeout(COMMANDS_TIMEOUT, read).await;
-        // Le processus ne servait qu'à ça, avec ses éventuels enfants.
+        // The process served only for this, along with any children.
         kill_group(pid, libc::SIGTERM);
-        let commands = answer.map_err(|_| "Le CLI met trop de temps à répondre.".to_string())??;
+        let commands = answer.map_err(|_| tr("The CLI is taking too long to answer.", "Le CLI met trop de temps à répondre.").to_string())??;
         Ok(self.remember_commands(cwd, &commands))
     }
 
-    // ---------- archives et suppression ----------
+    // ---------- archive and deletion ----------
 
     fn sid_of(&self, cli_id: &str) -> Option<String> {
         let map = self.sessions.lock().unwrap();
@@ -760,7 +775,7 @@ impl Hub {
         self.archived.lock().unwrap().iter().cloned().collect()
     }
 
-    /// Archive (en fermant la session ouverte dessus) ou restaure une conversation.
+    /// Archives (closing the session open on it) or restores a conversation.
     pub fn set_archived(&self, cli_id: &str, on: bool) -> Result<(), String> {
         let ids = {
             let mut set = self.archived.lock().unwrap();
@@ -785,8 +800,8 @@ impl Hub {
         Ok(())
     }
 
-    /// Met une conversation à la corbeille. Son processus est d'abord arrêté pour de bon :
-    /// sinon sa dernière écriture recréerait le transcript.
+    /// Moves a conversation to the Trash. Its process is stopped for good first:
+    /// otherwise its last write would recreate the transcript.
     pub async fn delete_conversation(&self, cli_id: &str) -> Result<(), String> {
         if let Some(sid) = self.sid_of(cli_id) {
             if let Some(proc) = self.remove_session(&sid) {
@@ -798,7 +813,7 @@ impl Hub {
         self.set_archived(cli_id, false)
     }
 
-    /// Fermeture de l'app : on tue tous les groupes de processus immédiatement.
+    /// App shutdown: kill all process groups immediately.
     pub fn shutdown_all(&self) {
         let map = self.sessions.lock().unwrap();
         for s in map.values() {
@@ -826,7 +841,7 @@ impl Hub {
                 .map(|s| s.p.sid.clone())
                 .collect();
             for v in victims {
-                self.suspend(&v, "inactivité");
+                self.suspend(&v, tr("inactivity", "inactivité"));
             }
         }
     }
@@ -837,7 +852,7 @@ impl Hub {
         let stdin = self.ensure_live(sid).await?;
         let first_message = {
             let mut map = self.sessions.lock().unwrap();
-            let s = map.get_mut(sid).ok_or("Session fermée")?;
+            let s = map.get_mut(sid).ok_or(tr("Session closed", "Session fermée"))?;
             s.busy = true;
             s.touch();
             let first = s.title_auto;
@@ -856,8 +871,8 @@ impl Hub {
         Ok(())
     }
 
-    /// Le CLI résume le premier message en un titre court et l'écrit dans son transcript : il restera à la
-    /// réouverture. En cas d'échec, la conversation garde le début du message comme titre.
+    /// The CLI sums up the first message as a short title and writes it into its transcript: it stays on
+    /// reopening. On failure, the conversation keeps the start of the message as its title.
     fn name_session(self: &Arc<Self>, sid: &str, first_message: &str) {
         let hub = self.clone();
         let sid = sid.to_string();
@@ -886,8 +901,8 @@ impl Hub {
         }
     }
 
-    /// Requête de contrôle dont on attend la réponse (contexte, état MCP…).
-    /// Renvoie `None` si aucun processus ne tourne pour cette session.
+    /// Control request whose answer is awaited (context, MCP status…).
+    /// Returns `None` if no process runs for this session.
     pub async fn request(self: &Arc<Self>, sid: &str, request: Value) -> Result<Option<Value>, String> {
         let stdin = {
             let map = self.sessions.lock().unwrap();
@@ -906,7 +921,7 @@ impl Hub {
             Ok(Ok(Err(e))) => Err(e),
             _ => {
                 self.pending.lock().unwrap().remove(&id);
-                Err("Le CLI n'a pas répondu.".into())
+                Err(tr("The CLI did not answer.", "Le CLI n'a pas répondu.").into())
             }
         }
     }
@@ -918,12 +933,12 @@ impl Hub {
         }
         self.persist();
         self.emit_session(sid);
-        // Même mécanisme que Claude Desktop : réglage appliqué à chaud, sans relancer le CLI.
+        // Same mechanism as Claude Desktop: setting applied live, without restarting the CLI.
         self.control(sid, json!({ "subtype": "apply_flag_settings", "settings": { "effortLevel": effort } })).await
     }
 
-    /// Conseiller appliqué à chaud (vérifié sur le CLI 2.1.319 : `/advisor` reflète le changement
-    /// sans relance ni consommation) ; `--advisor` le reprend au prochain lancement.
+    /// Advisor applied live (checked on CLI 2.1.319: `/advisor` reflects the change
+    /// without restart or usage); `--advisor` picks it up on the next launch.
     pub async fn set_advisor(self: &Arc<Self>, sid: &str, advisor: Option<String>) -> Result<(), String> {
         let advisor = advisor.filter(|a| !a.is_empty());
         if let Some(s) = self.sessions.lock().unwrap().get_mut(sid) {
@@ -967,19 +982,19 @@ impl Hub {
     ) -> Result<(), String> {
         let (mut perm, stdin) = {
             let mut map = self.sessions.lock().unwrap();
-            let s = map.get_mut(sid).ok_or("Session fermée")?;
+            let s = map.get_mut(sid).ok_or(tr("Session closed", "Session fermée"))?;
             s.touch();
-            let perm = s.perms.remove(request_id).ok_or("Demande déjà traitée")?;
-            (perm, s.proc.as_ref().map(|p| p.stdin.clone()).ok_or("Processus arrêté")?)
+            let perm = s.perms.remove(request_id).ok_or(tr("Request already handled", "Demande déjà traitée"))?;
+            (perm, s.proc.as_ref().map(|p| p.stdin.clone()).ok_or(tr("Process stopped", "Processus arrêté"))?)
         };
-        // Réponses à `AskUserQuestion` : le CLI les lit dans l'entrée de l'outil.
+        // Answers to `AskUserQuestion`: the CLI reads them from the tool input.
         if let Some(a) = answers {
             perm.input["answers"] = a;
         }
         let mut resp = match decision {
             "deny" => json!({
                 "behavior": "deny",
-                "message": message.unwrap_or_else(|| "L'utilisateur a refusé cette action.".into()),
+                "message": message.unwrap_or_else(|| "The user denied this action.".into()),
             }),
             _ => json!({ "behavior": "allow", "updatedInput": perm.input }),
         };
@@ -996,7 +1011,7 @@ impl Hub {
         write_line(&stdin, &control_success(request_id, resp)).await
     }
 
-    // ---------- protocole entrant ----------
+    // ---------- incoming protocol ----------
 
     fn reply_async(self: &Arc<Self>, sid: &str, msg: Value) {
         let stdin = {
@@ -1124,12 +1139,11 @@ impl Hub {
                     sid: sid.into(),
                     status: v["status"].as_str().map(str::to_string),
                 }),
-                "compact_boundary" => self.notice(Some(sid), "info", "Contexte compacté par le CLI."),
-                "api_retry" | "api_error" => self.notice(
-                    Some(sid),
-                    "warn",
-                    format!("Erreur API, nouvelle tentative : {}", one_line(&v.to_string(), 200)),
-                ),
+                "compact_boundary" => self.notice(Some(sid), "info", tr("Context compacted by the CLI.", "Contexte compacté par le CLI.")),
+                "api_retry" | "api_error" => {
+                    let detail = one_line(&v.to_string(), 200);
+                    self.notice(Some(sid), "warn", tr(format!("API error, retrying: {detail}"), format!("Erreur API, nouvelle tentative : {detail}")))
+                }
                 _ => {}
             },
             "control_request" => {
@@ -1138,7 +1152,7 @@ impl Hub {
                 if req["subtype"] == "can_use_tool" {
                     let tool_name = req["tool_name"].as_str().unwrap_or("?").to_string();
                     let input = req["input"].clone();
-                    // Montrer un fichier dans la conversation ne change rien et n'apprend rien au modèle : pas de demande.
+                    // Showing a file in the conversation changes nothing and tells the model nothing: no prompt.
                     if tool_name == crate::files_tool::TOOL {
                         let mut resp = json!({ "behavior": "allow", "updatedInput": input });
                         if let Some(id) = req["tool_use_id"].as_str() {
@@ -1184,7 +1198,7 @@ impl Hub {
                     let message = req["message"].clone();
                     tauri::async_runtime::spawn(async move {
                         let Some(simulator) = hub.app.try_state::<Arc<crate::simulator::Simulator>>().map(|s| s.inner().clone()) else {
-                            hub.reply_async(&sid, control_error(&rid, "simulateur indisponible"));
+                            hub.reply_async(&sid, control_error(&rid, "simulator unavailable"));
                             return;
                         };
                         let response = crate::simulator_tool::handle(&simulator, &message).await;
@@ -1195,9 +1209,9 @@ impl Hub {
                     let response = crate::files_tool::handle(&cwd, &req["message"]);
                     self.reply_async(sid, control_success(&rid, json!({ "mcp_response": response })));
                 } else {
-                    // hook_callback, mcp_message (autres serveurs), elicitation… non pris en charge :
-                    // on répond une erreur pour ne jamais bloquer le CLI.
-                    self.reply_async(sid, control_error(&rid, "non pris en charge par better-harness"));
+                    // hook_callback, mcp_message (other servers), elicitation… not supported:
+                    // answer with an error so the CLI never blocks.
+                    self.reply_async(sid, control_error(&rid, "not supported by better-harness"));
                 }
             }
             "control_response" => {
@@ -1206,13 +1220,13 @@ impl Hub {
                 let waiter = self.pending.lock().unwrap().remove(rid);
                 if let Some(tx) = waiter {
                     let out = if r["subtype"] == "error" {
-                        Err(r["error"].as_str().unwrap_or("erreur du CLI").to_string())
+                        Err(r["error"].as_str().unwrap_or(tr("CLI error", "erreur du CLI")).to_string())
                     } else {
                         Ok(r["response"].clone())
                     };
                     let _ = tx.send(out);
                 } else if r["response"].get("models").is_some() {
-                    // Réponse à `initialize` : vraie liste des modèles et niveaux d'effort.
+                    // Answer to `initialize`: the real list of models and effort levels.
                     let cwd = self.sessions.lock().unwrap().get(sid).map(|s| s.p.cwd.clone());
                     if let (Some(cwd), true) = (cwd, r["response"]["commands"].is_array()) {
                         self.remember_commands(&cwd, &r["response"]["commands"]);
@@ -1256,8 +1270,8 @@ impl Hub {
     }
 }
 
-/// Journal du protocole, activé par la variable d'environnement BH_PROTOCOL_LOG=<fichier>
-/// (lancer alors le binaire directement : `…/Better Harness.app/Contents/MacOS/better-harness`).
+/// Protocol log, enabled by the environment variable BH_PROTOCOL_LOG=<file>
+/// (then launch the binary directly: `…/Better Harness.app/Contents/MacOS/better-harness`).
 fn protocol_log(sid: &str, dir: &str, line: &str) {
     static PATH: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
     let Some(path) = PATH.get_or_init(|| std::env::var_os("BH_PROTOCOL_LOG").map(PathBuf::from)) else { return };
@@ -1273,14 +1287,14 @@ async fn write_line(stdin: &Stdin, v: &Value) -> Result<(), String> {
     protocol_log("-", "→", &String::from_utf8_lossy(&line));
     line.push(b'\n');
     let mut g = stdin.lock().await;
-    let w = g.as_mut().ok_or("Processus arrêté")?;
-    w.write_all(&line).await.map_err(|e| format!("Écriture vers claude impossible : {e}"))?;
+    let w = g.as_mut().ok_or(tr("Process stopped", "Processus arrêté"))?;
+    w.write_all(&line).await.map_err(|e| tr(format!("Could not write to claude: {e}"), format!("Écriture vers claude impossible : {e}")))?;
     w.flush().await.map_err(|e| e.to_string())
 }
 
 fn kill_group(pid: u32, sig: i32) {
     if pid > 1 {
-        // pgid == pid grâce à process_group(0) : tue aussi les serveurs MCP enfants.
+        // pgid == pid thanks to process_group(0): also kills the child MCP servers.
         unsafe {
             libc::kill(-(pid as i32), sig);
         }
@@ -1288,7 +1302,7 @@ fn kill_group(pid: u32, sig: i32) {
 }
 
 async fn stop_process(p: Proc) {
-    // 1. Fermer stdin : le CLI termine proprement (transcript écrit sur disque).
+    // 1. Close stdin: the CLI exits cleanly (transcript written to disk).
     p.stdin.lock().await.take();
     for (wait, sig) in [(Duration::from_secs(4), libc::SIGTERM), (Duration::from_secs(2), libc::SIGKILL)] {
         let deadline = tokio::time::Instant::now() + wait;
@@ -1296,7 +1310,7 @@ async fn stop_process(p: Proc) {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         if p.exited.load(Ordering::SeqCst) {
-            // Le CLI est sorti ; on nettoie d'éventuels enfants MCP orphelins du groupe.
+            // The CLI exited; clean up any orphaned MCP children of the group.
             kill_group(p.pid, libc::SIGTERM);
             return;
         }

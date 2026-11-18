@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::process::Command;
 
-/// Compile le pont vers le simulateur iOS, embarqué à côté de l'exécutable (`externalBin`).
-/// Il est toujours universel (Apple Silicon + Intel, macOS 13 minimum) : le même fichier sert au
-/// build de la machine et au bundle `universal-apple-darwin` des releases.
-/// Sans Xcode, un exécutable de remplacement dit pourquoi : l'app se construit quand même.
+/// Compiles the bridge to the iOS simulator, shipped next to the executable (`externalBin`).
+/// It is always universal (Apple Silicon + Intel, macOS 13 minimum): the same file serves the
+/// local build and the `universal-apple-darwin` bundle of releases.
+/// Without Xcode, a stand-in executable says why: the app still builds.
 fn build_sim_bridge() {
     let source = "helper/sim-bridge.swift";
     println!("cargo:rerun-if-changed={source}");
@@ -32,7 +32,7 @@ fn build_sim_bridge() {
         std::fs::copy(&outputs[0], &outputs[1]).unwrap();
         return;
     }
-    println!("cargo:warning=sim-bridge non compilé (Xcode absent ?) : l'onglet Simulateur sera indisponible");
+    println!("cargo:warning=sim-bridge not compiled (Xcode missing?): the Simulator tab will be unavailable");
     for output in &outputs {
         std::fs::write(output, "#!/bin/sh\nexit 1\n").unwrap();
         #[cfg(unix)]

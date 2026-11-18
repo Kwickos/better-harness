@@ -1,10 +1,10 @@
-//! Sélection des serveurs MCP par session.
+//! Per-session selection of MCP servers.
 //!
-//! Chaque processus `claude` relance sa propre copie de chaque serveur MCP stdio
-//! (constaté : rea, touchdesigner, blender… dupliqués dans chaque session de
-//! Desktop). En ne passant que les serveurs utiles via
-//! `--strict-mcp-config --mcp-config`, on évite ces processus et on allège le
-//! contexte (les définitions d'outils MCP coûtent des tokens).
+//! Each `claude` process starts its own copy of every stdio MCP server
+//! (observed: rea, touchdesigner, blender… duplicated in every Desktop
+//! session). Passing only the useful servers with
+//! `--strict-mcp-config --mcp-config` avoids those processes and lightens the
+//! context (MCP tool definitions cost tokens).
 
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -25,7 +25,7 @@ fn read_json(p: &Path) -> Option<Value> {
     serde_json::from_slice(&std::fs::read(p).ok()?).ok()
 }
 
-/// Configs des serveurs visibles pour `cwd`, par ordre de priorité croissante.
+/// Configs of the servers visible for `cwd`, in increasing priority order.
 fn sources(cwd: &str) -> Vec<(String, Map<String, Value>)> {
     let mut out = Vec::new();
     let home = dirs::home_dir().unwrap_or_default();
@@ -77,8 +77,8 @@ pub fn list(cwd: &str) -> Vec<McpEntry> {
     by_name.into_values().collect()
 }
 
-/// Écrit un fichier --mcp-config ne contenant que les serveurs `names`.
-/// Le fichier peut contenir des secrets (variables d'env) : droits 0600.
+/// Writes a --mcp-config file holding only the `names` servers.
+/// The file may hold secrets (env variables): mode 0600.
 pub fn write_config(cwd: &str, names: &[String], dest: &PathBuf) -> std::io::Result<()> {
     let mut chosen = Map::new();
     for (_, servers) in sources(cwd) {

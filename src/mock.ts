@@ -1,5 +1,5 @@
-// Backend simulé, chargé uniquement hors de Tauri (navigateur) : permet de travailler
-// le design et le rendu (streaming, outils, permissions) sans lancer le CLI.
+// Simulated backend, loaded only outside Tauri (browser): lets you work on
+// the design and rendering (streaming, tools, permissions) without starting the CLI.
 import type { Api, Attachment, UpdateState, Block, GitFile, HistoryEntry, ServerInfo, SessionInfo, SimDevice, Settings, UiEvent } from "./api";
 
 let emit: (e: UiEvent) => void = () => {};
@@ -13,7 +13,7 @@ function mk(p: Partial<SessionInfo> & { sid: string; title: string; cwd: string 
     permissionMode: "default",
     state: "idle",
     pid: null,
-    mcpLabel: "tous",
+    mcpLabel: "all",
     effort: null,
     advisor: null,
     lastActiveMs: now,
@@ -23,20 +23,20 @@ function mk(p: Partial<SessionInfo> & { sid: string; title: string; cwd: string 
 }
 sessions.set(
   "s1",
-  mk({ sid: "s1", title: "Refonte du composer", cwd: "/Users/demo/Code/better-harness", state: "suspended", cliId: "c1", lastActiveMs: now - 4 * 60_000 }),
+  mk({ sid: "s1", title: "Composer redesign", cwd: "/Users/demo/Code/better-harness", state: "suspended", cliId: "c1", lastActiveMs: now - 4 * 60_000 }),
 );
 sessions.set(
   "s2",
-  mk({ sid: "s2", title: "Migration de la base de facturation", cwd: "/Users/demo/Code/facturation-api", state: "suspended", cliId: "c2", lastActiveMs: now - 3 * 3600_000, model: "opus" }),
+  mk({ sid: "s2", title: "Billing database migration", cwd: "/Users/demo/Code/billing-api", state: "suspended", cliId: "c2", lastActiveMs: now - 3 * 3600_000, model: "opus" }),
 );
 
 const history: HistoryEntry[] = [
-  ["c1", "/Users/demo/Code/better-harness", "Refonte du composer", 4 * 60_000],
-  ["c2", "/Users/demo/Code/facturation-api", "Migration de la base de facturation", 3 * 3600_000],
-  ["c3", "/Users/demo/Code/atelier-site", "Corriger le menu mobile qui se ferme seul", 26 * 3600_000],
-  ["c4", "/Users/demo/Code/facturation-api", "Ajouter les avoirs partiels", 2 * 86400_000],
-  ["c5", "/Users/demo/Code/scripts", "Script de sauvegarde des photos", 5 * 86400_000],
-  ["c6", "/Users/demo/Code/atelier-site", "Passer les images en AVIF", 9 * 86400_000],
+  ["c1", "/Users/demo/Code/better-harness", "Composer redesign", 4 * 60_000],
+  ["c2", "/Users/demo/Code/billing-api", "Billing database migration", 3 * 3600_000],
+  ["c3", "/Users/demo/Code/studio-site", "Fix the mobile menu that closes on its own", 26 * 3600_000],
+  ["c4", "/Users/demo/Code/billing-api", "Add partial credit notes", 2 * 86400_000],
+  ["c5", "/Users/demo/Code/scripts", "Photo backup script", 5 * 86400_000],
+  ["c6", "/Users/demo/Code/studio-site", "Convert images to AVIF", 9 * 86400_000],
 ].map(([cliId, cwd, title, ago]) => ({ cliId: cliId as string, cwd: cwd as string, title: title as string, mtimeMs: now - (ago as number), size: 2_400_000 }));
 
 const archived = new Set<string>();
@@ -44,8 +44,8 @@ const SCRATCH = "/Users/demo/Library/Application Support/Better Harness/sans-dos
 const gitFiles: GitFile[] = [
   { path: "src/main.ts", oldPath: null, status: "M", added: 12, removed: 3 },
   { path: "src/styles.css", oldPath: null, status: "M", added: 4, removed: 1 },
-  { path: "docs/notes de version.md", oldPath: null, status: "?", added: 6, removed: 0 },
-  { path: "src/ancien.ts", oldPath: null, status: "D", added: 0, removed: 18 },
+  { path: "docs/release notes.md", oldPath: null, status: "?", added: 6, removed: 0 },
+  { path: "src/legacy.ts", oldPath: null, status: "D", added: 0, removed: 18 },
   { path: "src/fonts/geist.woff2", oldPath: null, status: "M", added: null, removed: null },
 ];
 const GIT_DIFF = `diff --git a/src/main.ts b/src/main.ts
@@ -84,7 +84,15 @@ let settings: Settings = {
   mcpSelected: [],
   partialMessages: true,
   allTools: false,
-  recentDirs: ["/Users/demo/Code/better-harness", "/Users/demo/Code/facturation-api", "/Users/demo/Code/atelier-site", "/Users/demo/Code/ws", "/Users/demo/Archive/ws", "/Users/demo/Code/outils-internes", "/Users/demo/Code/site-vitrine"],
+  recentDirs: ["/Users/demo/Code/better-harness", "/Users/demo/Code/billing-api", "/Users/demo/Code/studio-site", "/Users/demo/Code/ws", "/Users/demo/Archive/ws", "/Users/demo/Code/internal-tools", "/Users/demo/Code/marketing-site"],
+  // Settings live in memory here: keep the language across reloads, like the real app does.
+  language: (() => {
+    try {
+      return localStorage.getItem("bh-language") ?? "en";
+    } catch {
+      return "en";
+    }
+  })(),
 };
 
 const update = (sid: string, patch: Partial<SessionInfo>) => {
@@ -95,7 +103,7 @@ const update = (sid: string, patch: Partial<SessionInfo>) => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Streame du texte comme le cœur Rust : un envoi groupé toutes les 50 ms. */
+/** Streams text like the Rust core: one batched send every 50 ms. */
 async function stream(sid: string, text: string, thinking = false) {
   let first = true;
   for (let i = 0; i < text.length; i += 22) {
@@ -105,17 +113,17 @@ async function stream(sid: string, text: string, thinking = false) {
   }
 }
 
-const REPLY_1 = `Je regarde comment le composer est construit avant de toucher au style.
+const REPLY_1 = `Let me look at how the composer is built before touching the styles.
 
-Le champ est un \`<textarea>\` qui grandit avec son contenu, plafonné à **260 px**. Trois points à revoir :
+The field is a \`<textarea>\` that grows with its content, capped at **260 px**. Three things to fix:
 
-1. Le bouton d'envoi n'a pas d'état désactivé quand le champ est vide.
-2. Le modèle et le mode de permission sont dans l'en-tête, loin de l'action.
-3. Rien n'indique qu'un message peut être mis en file pendant une génération.
+1. The send button has no disabled state when the field is empty.
+2. The model and permission mode sit in the header, far from the action.
+3. Nothing shows that a message can be queued during a generation.
 
-Je vérifie les styles actuels :`;
+Checking the current styles:`;
 
-const REPLY_2 = `C'est fait. Le composer regroupe maintenant le texte, le modèle et le mode :
+const REPLY_2 = `Done. The composer now groups the text, the model and the mode:
 
 \`\`\`css
 .composer {
@@ -123,27 +131,27 @@ const REPLY_2 = `C'est fait. Le composer regroupe maintenant le texte, le modèl
   grid-template-rows: 1fr auto;
   background: var(--tone-1);
   border-radius: 14px;
-  /* Objet : Application Saisonniers : les comptes à créer pour la mise en ligne, avec une ligne assez longue pour dépasser largement la largeur de la colonne de lecture du fil. */
+  /* Subject: Seasonal Staff app: the accounts to create before going live, with a line long enough to run well past the width of the thread's reading column. */
 }
 \`\`\`
 
-| Élément | Avant | Après |
+| Element | Before | After |
 |---|---|---|
-| Modèle | en-tête | composer |
-| Envoi | toujours actif | désactivé si vide |
-| File d'attente | invisible | « 1 message en attente » |
+| Model | header | composer |
+| Send | always enabled | disabled when empty |
+| Queue | invisible | "1 message queued" |
 
-> Le streaming reste coalescé à 20 rafraîchissements par seconde : le rendu Markdown en direct ne recalcule que le dernier bloc.
+> Streaming stays coalesced at 20 refreshes per second: live Markdown rendering only recomputes the last block.
 
-Tu veux que j'applique la même logique au dialogue de nouvelle session ?`;
+Want me to apply the same logic to the new session dialog?`;
 
 const LEVELS = ["low", "medium", "high", "xhigh", "max"];
 const MODELS = [
-  { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Par défaut (recommandé)", description: "Opus 5.5 · pour les tâches complexes du quotidien", supportedEffortLevels: LEVELS },
-  { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1", description: "Le plus capable, pour les tâches longues et difficiles", supportedEffortLevels: LEVELS },
-  { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5", description: "Pour les tâches complexes du quotidien", supportedEffortLevels: LEVELS },
-  { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet 5.5", description: "Efficace pour les tâches courantes", supportedEffortLevels: LEVELS },
-  { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku 5.5", description: "Le plus rapide", supportedEffortLevels: LEVELS },
+  { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)", description: "Opus 5.5 · for complex everyday tasks", supportedEffortLevels: LEVELS },
+  { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1", description: "Most capable, for long and difficult tasks", supportedEffortLevels: LEVELS },
+  { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5", description: "For complex everyday tasks", supportedEffortLevels: LEVELS },
+  { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet 5.5", description: "Efficient for routine tasks", supportedEffortLevels: LEVELS },
+  { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku 5.5", description: "Fastest", supportedEffortLevels: LEVELS },
 ];
 
 const servers = new Map<string, ServerInfo>();
@@ -158,10 +166,10 @@ function defsFor(cwd: string): ServerInfo[] {
 
 let permResolve: ((d: string) => void) | null = null;
 
-/** Démonstrations : le mot du message choisit le type de demande. */
+/** Demos: a word in the message picks the kind of request. */
 function demoRequest(prompt: string) {
   if (prompt.includes("plan"))
-    return { toolName: "ExitPlanMode", title: null, description: null, input: JSON.stringify({ plan: "# Refonte du composer\n\n1. Remplacer le `textarea` par un champ éditable.\n2. Ajouter les mentions `/` et `@`.\n3. Vérifier le rendu." }) };
+    return { toolName: "ExitPlanMode", title: null, description: null, input: JSON.stringify({ plan: "# Composer redesign\n\n1. Replace the `textarea` with an editable field.\n2. Add `/` and `@` mentions.\n3. Check the rendering." }) };
   if (prompt.includes("questions"))
     return {
       toolName: "AskUserQuestion",
@@ -169,17 +177,17 @@ function demoRequest(prompt: string) {
       description: null,
       input: JSON.stringify({
         questions: [
-          { question: "Quelle base de données utiliser ?", header: "Base", multiSelect: false, options: [{ label: "SQLite (recommandé)", description: "Aucun service à lancer, un seul fichier." }, { label: "Postgres", description: "Plus adapté à plusieurs écritures simultanées." }] },
-          { question: "Quel ton pour les messages ?", header: "Ton", multiSelect: false, options: [{ label: "Direct", description: "Phrases courtes, sans formule." }, { label: "Chaleureux", description: "Plus de tutoiement et d'exemples." }] },
-          { question: "Quels écrans veux-tu d'abord ?", header: "Écrans", multiSelect: true, options: [{ label: "Accueil", description: "Liste des projets." }, { label: "Réglages", description: "Compte et préférences." }, { label: "Historique", description: "Dernières actions." }] },
+          { question: "Which database should we use?", header: "Database", multiSelect: false, options: [{ label: "SQLite (recommended)", description: "No service to run, a single file." }, { label: "Postgres", description: "Better suited to concurrent writes." }] },
+          { question: "What tone for the messages?", header: "Tone", multiSelect: false, options: [{ label: "Direct", description: "Short sentences, no pleasantries." }, { label: "Warm", description: "More casual, with more examples." }] },
+          { question: "Which screens do you want first?", header: "Screens", multiSelect: true, options: [{ label: "Home", description: "Project list." }, { label: "Settings", description: "Account and preferences." }, { label: "History", description: "Recent actions." }] },
         ],
       }),
     };
   if (prompt.includes("question"))
-    return { toolName: "AskUserQuestion", title: null, description: null, input: JSON.stringify({ questions: [{ question: "Où placer le sélecteur de modèle ?", header: "Modèle", multiSelect: false, options: [{ label: "Dans le composer (recommandé)", description: "Toujours visible au moment d'envoyer." }, { label: "Dans l'en-tête", description: "Libère de la place sous le champ." }] }] }) };
-  if (prompt.includes("édite"))
-    return { toolName: "Edit", title: null, description: "Ajoute un rayon au composer.", input: JSON.stringify({ file_path: "/Users/demo/Code/better-harness/src/styles.css", old_string: "a {\n  color: red;\n}", new_string: "a {\n  color: blue;\n}" }, null, 2) };
-  return { toolName: "Bash", title: null, description: "Compile l'interface pour vérifier les types.", input: "npm run build" };
+    return { toolName: "AskUserQuestion", title: null, description: null, input: JSON.stringify({ questions: [{ question: "Where should the model picker go?", header: "Model", multiSelect: false, options: [{ label: "In the composer (recommended)", description: "Always visible when sending." }, { label: "In the header", description: "Frees up space under the field." }] }] }) };
+  if (prompt.includes("edit"))
+    return { toolName: "Edit", title: null, description: "Adds a radius to the composer.", input: JSON.stringify({ file_path: "/Users/demo/Code/better-harness/src/styles.css", old_string: "a {\n  color: red;\n}", new_string: "a {\n  color: blue;\n}" }, null, 2) };
+  return { toolName: "Bash", title: null, description: "Builds the interface to check types.", input: "npm run build" };
 }
 
 async function runTurn(sid: string, prompt: string) {
@@ -190,10 +198,10 @@ async function runTurn(sid: string, prompt: string) {
   emit({ kind: "rateLimit", sid, status: "allowed", resetsAt: hours(120), window: "seven_day", windows: { five_hour: { utilization: 0.38, resetsAt: hours(2) }, seven_day: { utilization: 0.19, resetsAt: hours(120) } } });
   emit({ kind: "status", sid, status: "requesting" });
   await sleep(500);
-  await stream(sid, "L'utilisateur veut revoir le composer. Je commence par lire le code existant, puis les styles.", true);
+  await stream(sid, "The user wants to rework the composer. I'll read the existing code first, then the styles.", true);
   const mid = `m${Date.now()}`;
-  emit({ kind: "assistant", sid, id: mid, parent: null, blocks: [{ t: "thinking", text: "L'utilisateur veut revoir le composer. Je commence par lire le code existant, puis les styles." }] });
-  const reply = prompt.toLowerCase().includes("court") ? "D'accord." : REPLY_1;
+  emit({ kind: "assistant", sid, id: mid, parent: null, blocks: [{ t: "thinking", text: "The user wants to rework the composer. I'll read the existing code first, then the styles." }] });
+  const reply = prompt.toLowerCase().includes("short") ? "Sure." : REPLY_1;
   await stream(sid, reply);
   emit({ kind: "assistant", sid, id: mid, parent: null, blocks: [{ t: "text", text: reply }] });
   const tools: Block[] = [
@@ -206,14 +214,14 @@ async function runTurn(sid: string, prompt: string) {
   emit({ kind: "toolResult", sid, toolUseId: "t1", parent: null, isError: false, text: "1\timport { openUrl } from \"@tauri-apps/plugin-opener\";\n2\timport { api } from \"./api\";\n…", truncated: false });
   emit({ kind: "toolResult", sid, toolUseId: "t2b", parent: null, isError: false, text: "The file has been updated.", truncated: false });
   emit({ kind: "toolResult", sid, toolUseId: "t2", parent: null, isError: false, text: "src/main.ts:412:$(\"composer\").addEventListener(\"submit\", …\nsrc/styles.css:188:#composer {", truncated: false });
-  // Un sous-agent sur Haiku : le monde pixel art le fait entrer par la porte, travailler, puis repartir.
-  emit({ kind: "assistant", sid, id: mid, parent: null, blocks: [{ t: "tool", id: "a1", name: "Agent", summary: "Cherche les usages du composer", input: JSON.stringify({ description: "Usages du composer", subagent_type: "Explore", model: "haiku", prompt: "…" }) }] });
+  // A subagent on Haiku: the pixel-art world brings it in through the door, has it work, then leave.
+  emit({ kind: "assistant", sid, id: mid, parent: null, blocks: [{ t: "tool", id: "a1", name: "Agent", summary: "Find usages of the composer", input: JSON.stringify({ description: "Composer usages", subagent_type: "Explore", model: "haiku", prompt: "…" }) }] });
   await sleep(1800);
   emit({ kind: "assistant", sid, id: "sa1", parent: "a1", blocks: [{ t: "tool", id: "a1-g", name: "Grep", summary: "renderComposer", input: '{"pattern":"renderComposer"}' }] });
   await sleep(2600);
   emit({ kind: "assistant", sid, id: "sa2", parent: "a1", blocks: [{ t: "tool", id: "a1-r", name: "Read", summary: "src/composer.ts", input: '{"file_path":"src/composer.ts"}' }] });
   await sleep(2600);
-  emit({ kind: "toolResult", sid, toolUseId: "a1", parent: null, isError: false, text: "3 usages trouvés.", truncated: false });
+  emit({ kind: "toolResult", sid, toolUseId: "a1", parent: null, isError: false, text: "Found 3 usages.", truncated: false });
   await sleep(1200);
   const bash: Block = { t: "tool", id: "t3", name: "Bash", summary: "npm run build", input: "npm run build" };
   emit({ kind: "assistant", sid, id: mid, parent: null, blocks: [bash] });
@@ -236,11 +244,11 @@ async function runTurn(sid: string, prompt: string) {
     toolUseId: "t3",
     parent: null,
     isError: !ok,
-    text: ok ? "> tsc --noEmit && vite build\n✓ 13 modules transformed.\n✓ built in 69ms" : "L'utilisateur a refusé cette action.", // taste-skill-ignore : sortie littérale de vite
+    text: ok ? "> tsc --noEmit && vite build\n✓ 13 modules transformed.\n✓ built in 69ms" : "The user denied this action.", // taste-skill-ignore: literal vite output
     truncated: false,
   });
   const mid2 = `m${Date.now()}`;
-  const final = ok ? REPLY_2 : "Entendu, je ne lance pas la compilation.";
+  const final = ok ? REPLY_2 : "Understood, I won't run the build.";
   await stream(sid, final);
   emit({ kind: "assistant", sid, id: mid2, parent: null, blocks: [{ t: "text", text: final }] });
   emit({ kind: "status", sid, status: null });
@@ -251,7 +259,7 @@ async function runTurn(sid: string, prompt: string) {
 const simDevices: SimDevice[] = [
   { udid: "sim-1", name: "iPhone 18 Pro", state: "Booted", runtime: "iOS 27.0" },
   { udid: "sim-2", name: "iPhone 17e", state: "Shutdown", runtime: "iOS 27.0" },
-  { udid: "sim-3", name: "iPad Pro 11 pouces", state: "Shutdown", runtime: "iOS 27.0" },
+  { udid: "sim-3", name: "iPad Pro 11-inch", state: "Shutdown", runtime: "iOS 27.0" },
   { udid: "sim-4", name: "iPhone 17e", state: "Shutdown", runtime: "iOS 18.2" },
 ];
 let simAttached: string | null = null;
@@ -259,7 +267,7 @@ let simDirty = false;
 let simDark = false;
 let simTouches = 0;
 
-/** Un faux écran d'iPhone : assez pour voir la mise en page et l'effet d'un toucher. */
+/** A fake iPhone screen: enough to see the layout and the effect of a tap. */
 async function mockScreen(): Promise<ArrayBuffer> {
   const pad = simAttached === "sim-3";
   const canvas = new OffscreenCanvas(pad ? 834 : 585, pad ? 1194 : 1266);
@@ -270,23 +278,23 @@ async function mockScreen(): Promise<ArrayBuffer> {
   c.font = "600 22px -apple-system";
   c.fillText("15:42", 60, 52);
   c.font = "700 56px -apple-system";
-  c.fillText("Réglages", 40, 190);
+  c.fillText("Settings", 40, 190);
   for (let i = 0; i < 8; i++) {
     c.fillStyle = simDark ? "#1c1c1f" : "#fff";
     c.fillRect(40, 240 + i * 112, canvas.width - 80, 96);
     c.fillStyle = simDark ? "#ddd" : "#333";
     c.font = "400 30px -apple-system";
-    c.fillText(i === 0 ? `Touchers : ${simTouches}` : `Ligne ${i + 1}`, 70, 300 + i * 112);
+    c.fillText(i === 0 ? `Taps: ${simTouches}` : `Row ${i + 1}`, 70, 300 + i * 112);
   }
   return (await canvas.convertToBlob({ type: "image/jpeg", quality: 0.8 })).arrayBuffer();
 }
 
-/** Images de démonstration : un dégradé à la taille annoncée, pour voir la mise en page. */
+/** Demo images: a gradient at the stated size, to see the layout. */
 const MOCK_IMAGES: Record<string, [number, number, string, string]> = {
-  "capture-accueil.png": [2880, 1800, "#4f46e5", "#0ea5e9"],
-  "icone.png": [64, 64, "#f59e0b", "#ef4444"],
-  "maquette-mobile.png": [1170, 2532, "#10b981", "#0f766e"],
-  "graphique.svg": [0, 0, "#64748b", "#0f172a"],
+  "home-screenshot.png": [2880, 1800, "#4f46e5", "#0ea5e9"],
+  "icon.png": [64, 64, "#f59e0b", "#ef4444"],
+  "mobile-mockup.png": [1170, 2532, "#10b981", "#0f766e"],
+  "chart.svg": [0, 0, "#64748b", "#0f172a"],
   "photo.jpg": [4032, 3024, "#a855f7", "#ec4899"],
 };
 function mockImage(name: string, w: number, h: number, from: string, to: string): string {
@@ -298,7 +306,7 @@ function mockAttachment(cwd: string, path: string): Attachment {
   const full = path.startsWith("/") ? path : `${cwd}/${path}`;
   const name = full.split("/").pop() ?? full;
   const img = MOCK_IMAGES[name];
-  const exists = !name.includes("absent");
+  const exists = !name.includes("missing");
   return { path: full, name, exists, size: exists ? 1_284_000 : 0, image: !!img && exists, width: img?.[0] || null, height: img?.[1] || null, url: img && exists ? mockImage(name, ...img) : undefined };
 }
 
@@ -316,22 +324,22 @@ export const mockApi: Api = {
   listSessions: async () => [...sessions.values()].map((s) => ({ ...s })),
   createSession: async (o) => {
     const sid = `s${Date.now()}`;
-    const s = mk({ sid, title: o.title ?? "Nouvelle session", cwd: o.cwd, cliId: o.resume ?? null, model: o.model ?? null, advisor: o.advisor ?? null, state: o.resume ? "suspended" : "idle", mcpLabel: o.mcp ? (o.mcp.length ? o.mcp.join(", ") : "aucun") : "tous" });
+    const s = mk({ sid, title: o.title ?? "New session", cwd: o.cwd, cliId: o.resume ?? null, model: o.model ?? null, advisor: o.advisor ?? null, state: o.resume ? "suspended" : "idle", mcpLabel: o.mcp ? (o.mcp.length ? o.mcp.join(", ") : "none") : "all" });
     sessions.set(sid, s);
     queueMicrotask(() => emit({ kind: "sessionUpdate", session: { ...s } }));
     return { ...s };
   },
   send: async (sid, text) => {
     const s = sessions.get(sid);
-    if (s && s.title === "Nouvelle session") {
+    if (s && s.title === "New session") {
       update(sid, { title: text.slice(0, 60) });
-      // Comme le CLI : le titre généré arrive un instant après le premier message.
-      setTimeout(() => update(sid, { title: "Titre généré à partir du premier message" }), 900);
+      // Like the CLI: the generated title arrives a moment after the first message.
+      setTimeout(() => update(sid, { title: "Title generated from the first message" }), 900);
     }
     void runTurn(sid, text);
   },
   interrupt: async (sid) => {
-    emit({ kind: "notice", sid, level: "info", text: "Interruption demandée." });
+    emit({ kind: "notice", sid, level: "info", text: "Interrupt requested." });
   },
   respondPermission: async (_sid, _rid, decision, answers, message) => {
     (window as unknown as { __mockAnswer: unknown }).__mockAnswer = { decision, answers, message };
@@ -341,7 +349,7 @@ export const mockApi: Api = {
   setModel: async (sid, model) => update(sid, { model }),
   suspend: async (sid) => {
     update(sid, { state: "suspended", pid: null });
-    emit({ kind: "notice", sid, level: "info", text: "Processus suspendu (manuelle) ; reprise automatique au prochain message." });
+    emit({ kind: "notice", sid, level: "info", text: "Process suspended (manual); resumes automatically on the next message." });
   },
   close: async (sid) => {
     sessions.delete(sid);
@@ -356,7 +364,7 @@ export const mockApi: Api = {
   listCommands: async () => {
     await sleep(300);
     return [
-      ["compact", "Résume l'historique de la conversation pour libérer du contexte."],
+      ["compact", "Summarize the conversation history to free up context."],
       ["make-interfaces-feel-better", "Design engineering principles for making interfaces feel polished."],
       ["transitions-polish", "Polish and refine existing motion against the transitions.dev motion-token scale."],
       ["framer-motion-animator", "Creates smooth animations and micro-interactions using Framer Motion."],
@@ -368,15 +376,15 @@ export const mockApi: Api = {
     ].map(([name, description]) => ({ name, description }));
   },
   mentionFiles: async (cwd, query) => {
-    if (query.startsWith("/")) return ["/Users/demo/Documents/", "/Users/demo/Mes projets/", "/Users/demo/notes.md"].filter((p) => p.toLowerCase().startsWith(query.toLowerCase()));
+    if (query.startsWith("/")) return ["/Users/demo/Documents/", "/Users/demo/My projects/", "/Users/demo/notes.md"].filter((p) => p.toLowerCase().startsWith(query.toLowerCase()));
     if (cwd === SCRATCH) return [];
-    return ["src/", "docs/", "README.md", "package.json", "src/main.ts", "src/styles.css", "src/composer.ts", "docs/notes de version.md"].filter((p) => p.toLowerCase().includes(query.toLowerCase()));
+    return ["src/", "docs/", "README.md", "package.json", "src/main.ts", "src/styles.css", "src/composer.ts", "docs/release notes.md"].filter((p) => p.toLowerCase().includes(query.toLowerCase()));
   },
   cliDefaults: async () => ({ model: null, effort: "xhigh" }),
   gitStatus: async (cwd) =>
     cwd === SCRATCH || cwd.includes("scripts")
       ? { isRepo: false, root: "", hasHead: false, branch: null, files: [], truncated: false }
-      : { isRepo: true, root: cwd, hasHead: true, branch: "main", files: cwd.includes("facturation") ? [] : gitFiles.map((f) => ({ ...f })), truncated: false },
+      : { isRepo: true, root: cwd, hasHead: true, branch: "main", files: cwd.includes("billing") ? [] : gitFiles.map((f) => ({ ...f })), truncated: false },
   gitDiff: async (_cwd, path) => (path.endsWith(".woff2") ? { text: `Binary files a/${path} and b/${path} differ`, truncated: false, binary: true } : { text: GIT_DIFF, truncated: false, binary: false }),
   gitDiscard: async (_cwd, path) => {
     const i = gitFiles.findIndex((f) => f.path === path);
@@ -398,20 +406,20 @@ export const mockApi: Api = {
     if (i >= 0) history.splice(i, 1);
   },
   loadTranscript: async (sid, cliId) => {
-    // Une conversation volumineuse : sa lecture dépasse l'attente de la transition.
+    // A large conversation: reading it takes longer than the transition waits.
     if (cliId === "c5") await sleep(600);
     if (cliId !== "c1") return { events: [], hasMore: false };
     const ev: UiEvent[] = [
-      { kind: "user", sid, text: "Le composer est trop chargé. Tu peux le simplifier ?" },
-      { kind: "assistant", sid, id: "h1", parent: null, blocks: [{ t: "text", text: "Oui. Je commence par regarder **ce qui est affiché** et ce qui sert vraiment." }, { t: "tool", id: "h-t1", name: "Read", summary: "index.html", input: '{ "file_path": "index.html" }' }] },
+      { kind: "user", sid, text: "The composer is too cluttered. Can you simplify it?" },
+      { kind: "assistant", sid, id: "h1", parent: null, blocks: [{ t: "text", text: "Yes. I'll start by looking at **what is shown** and what is actually used." }, { t: "tool", id: "h-t1", name: "Read", summary: "index.html", input: '{ "file_path": "index.html" }' }] },
       { kind: "toolResult", sid, toolUseId: "h-t1", parent: null, isError: false, text: "<form id=\"composer\">…</form>", truncated: false },
-      { kind: "assistant", sid, id: "h-a", parent: null, blocks: [{ t: "tool", id: "h-t2", name: "Artifact", summary: "maquette.html", input: '{ "file_path": "/tmp/maquette.html", "icon": "layout" }' }] },
-      { kind: "toolResult", sid, toolUseId: "h-t2", parent: null, isError: false, text: "Published /tmp/maquette.html at https://claude.ai/artifact/demo", truncated: false, artifact: { url: "https://claude.ai/artifact/demo", title: "Maquette du composer", path: "/tmp/maquette.html" } },
-      { kind: "assistant", sid, id: "h2", parent: null, blocks: [{ t: "text", text: "Il y a trois contrôles qui pourraient rejoindre le composer : le modèle, le mode et l'interruption. Je propose de les regrouper sous le champ de saisie." }] },
-      { kind: "assistant", sid, id: "h3", parent: null, blocks: [{ t: "text", text: "Voici la capture de l'accueil après la refonte :" }, { t: "tool", id: "h-f1", name: "mcp__harness__send_files", summary: "", input: JSON.stringify({ files: ["docs/capture-accueil.png"] }, null, 2) }] },
-      { kind: "toolResult", sid, toolUseId: "h-f1", parent: null, isError: false, text: "Shown to the user: docs/capture-accueil.png.", truncated: false },
-      { kind: "assistant", sid, id: "h4", parent: null, blocks: [{ t: "tool", id: "h-f2", name: "mcp__harness__send_files", summary: "", input: JSON.stringify({ files: ["/tmp/maquette-mobile.png", "/tmp/photo.jpg", "/tmp/icone.png", "/tmp/graphique.svg", "docs/rapport final des mesures.pdf", "/tmp/export-absent.csv"], caption: "Les maquettes, le rapport et l'export demandés." }, null, 2) }] },
-      { kind: "toolResult", sid, toolUseId: "h-f2", parent: null, isError: false, text: "Shown to the user: … Not found, not shown: /tmp/export-absent.csv.", truncated: false },
+      { kind: "assistant", sid, id: "h-a", parent: null, blocks: [{ t: "tool", id: "h-t2", name: "Artifact", summary: "mockup.html", input: '{ "file_path": "/tmp/mockup.html", "icon": "layout" }' }] },
+      { kind: "toolResult", sid, toolUseId: "h-t2", parent: null, isError: false, text: "Published /tmp/mockup.html at https://claude.ai/artifact/demo", truncated: false, artifact: { url: "https://claude.ai/artifact/demo", title: "Composer mockup", path: "/tmp/mockup.html" } },
+      { kind: "assistant", sid, id: "h2", parent: null, blocks: [{ t: "text", text: "Three controls could move into the composer: the model, the mode and interrupt. I suggest grouping them under the input field." }] },
+      { kind: "assistant", sid, id: "h3", parent: null, blocks: [{ t: "text", text: "Here is the home screen after the redesign:" }, { t: "tool", id: "h-f1", name: "mcp__harness__send_files", summary: "", input: JSON.stringify({ files: ["docs/home-screenshot.png"] }, null, 2) }] },
+      { kind: "toolResult", sid, toolUseId: "h-f1", parent: null, isError: false, text: "Shown to the user: docs/home-screenshot.png.", truncated: false },
+      { kind: "assistant", sid, id: "h4", parent: null, blocks: [{ t: "tool", id: "h-f2", name: "mcp__harness__send_files", summary: "", input: JSON.stringify({ files: ["/tmp/mobile-mockup.png", "/tmp/photo.jpg", "/tmp/icon.png", "/tmp/chart.svg", "docs/final measurements report.pdf", "/tmp/missing-export.csv"], caption: "The mockups, the report and the export you asked for." }, null, 2) }] },
+      { kind: "toolResult", sid, toolUseId: "h-f2", parent: null, isError: false, text: "Shown to the user: … Not found, not shown: /tmp/missing-export.csv.", truncated: false },
     ];
     return { events: ev, hasMore: true };
   },
@@ -432,17 +440,18 @@ export const mockApi: Api = {
   saveSettings: async (s) => {
     settings = s;
   },
+  setLanguage: async () => undefined,
   setEffort: async (sid, effort) => update(sid, { effort }),
   setAdvisor: async (sid, advisor) => update(sid, { advisor }),
   contextUsage: async () => ({
     totalTokens: 41_230,
     maxTokens: 1_000_000,
     categories: [
-      { id: "system_prompt", name: "Prompt système", tokens: 2682, kind: "used" },
-      { id: "system_tools", name: "Outils", tokens: 13_664, kind: "used" },
+      { id: "system_prompt", name: "System prompt", tokens: 2682, kind: "used" },
+      { id: "system_tools", name: "System tools", tokens: 13_664, kind: "used" },
       { id: "skills", name: "Skills", tokens: 9951, kind: "used" },
       { id: "messages", name: "Messages", tokens: 14_340, kind: "used" },
-      { id: "memory_files", name: "Mémoire", tokens: 593, kind: "used" },
+      { id: "memory_files", name: "Memory files", tokens: 593, kind: "used" },
     ],
   }),
   mcpStatus: async () => ({
@@ -460,7 +469,7 @@ export const mockApi: Api = {
     const s: ServerInfo = { ...def, state: "running", pid: 51234, url: null };
     servers.set(s.key, s);
     emit({ kind: "server", server: { ...s } });
-    const lines = [`$ ${s.command}`, "", "> atelier-web@0.4.2 dev", "> vite", "", "  VITE v8.3.6  ready in 412 ms", "", "  ➜  Local:   http://localhost:5173/", "  ➜  Network: use --host to expose"]; // taste-skill-ignore : sortie littérale de vite
+    const lines = [`$ ${s.command}`, "", "> studio-web@0.4.2 dev", "> vite", "", "  VITE v8.3.6  ready in 412 ms", "", "  ➜  Local:   http://localhost:5173/", "  ➜  Network: use --host to expose"]; // taste-skill-ignore: literal vite output
     serverLogs.set(s.key, []);
     for (const l of lines) {
       await sleep(120);
@@ -478,8 +487,8 @@ export const mockApi: Api = {
     if (!s) return;
     s.state = "stopped";
     s.pid = null;
-    serverLogs.get(key)?.push("— arrêté (code 0)");
-    emit({ kind: "serverLog", key, lines: ["— arrêté (code 0)"] });
+    serverLogs.get(key)?.push("— stopped (code 0)");
+    emit({ kind: "serverLog", key, lines: ["— stopped (code 0)"] });
     emit({ kind: "server", server: { ...s } });
   },
   serverLogs: async (key) => serverLogs.get(key) ?? [],

@@ -6,6 +6,7 @@ mod files_tool;
 mod git;
 mod history;
 mod hub;
+mod i18n;
 mod mcp;
 mod mentions;
 mod metrics;
@@ -33,11 +34,11 @@ pub fn run() {
             let hub = hub::Hub::new(app.handle().clone(), config_dir, cache_dir);
             hub.restore();
             tauri::async_runtime::spawn(hub.clone().supervise());
-            // Préchauffe la lecture du PATH du shell pour que le premier message parte vite.
+            // Warms up the shell PATH lookup so the first message goes out fast.
             tauri::async_runtime::spawn(async {
                 shellenv::path().await;
             });
-            // Filet : si l'interface ne signale jamais qu'elle est prête, la fenêtre s'affiche quand même.
+            // Safety net: if the UI never reports it is ready, the window shows anyway.
             let window_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -78,6 +79,7 @@ pub fn run() {
             commands::get_metrics,
             commands::get_settings,
             commands::save_settings,
+            commands::set_language,
             commands::app_info,
             commands::set_effort,
             commands::set_advisor,
@@ -124,7 +126,7 @@ pub fn run() {
             commands::update_install,
         ])
         .on_window_event(|window, event| {
-            // Avec une webview enfant (navigateur), la vue principale suit la taille de la fenêtre.
+            // With a child webview (browser), the main view follows the window size.
             if let tauri::WindowEvent::Resized(size) = event {
                 if let Some(main) = window.app_handle().get_webview("main") {
                     let _ = main.set_size(*size);
@@ -132,15 +134,15 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("échec du démarrage de Better Harness")
+        .expect("failed to start Better Harness")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 app.state::<Arc<hub::Hub>>().shutdown_all();
                 app.state::<Arc<servers::Servers>>().shutdown_all();
                 app.state::<Arc<simulator::Simulator>>().close_stream();
-                // Une version téléchargée mais pas encore installée l'est maintenant : le prochain lancement est à jour.
+                // A version downloaded but not yet installed is installed now: the next launch is up to date.
                 if let Err(e) = app.state::<Arc<updates::Updates>>().install() {
-                    eprintln!("mise à jour non installée : {e}");
+                    eprintln!("update not installed: {e}");
                 }
             }
         });

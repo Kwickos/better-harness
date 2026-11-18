@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Avant la version 2, le dernier choix du composer était enregistré comme défaut :
-/// ces valeurs n'ont jamais été choisies dans les réglages, on les oublie.
+/// Before version 2, the composer's last choice was saved as the default:
+/// those values were never picked in the settings, so they are dropped.
 const SETTINGS_VERSION: u32 = 2;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -10,30 +10,32 @@ const SETTINGS_VERSION: u32 = 2;
 pub struct Settings {
     #[serde(default)]
     pub settings_version: u32,
-    /// Chemin explicite du binaire `claude` (sinon résolu via le PATH du shell).
+    /// Explicit path to the `claude` binary (otherwise resolved through the shell PATH).
     pub claude_path: Option<String>,
-    /// Nombre max de processus CLI vivants en même temps. Au-delà, la session
-    /// inactive la plus ancienne est suspendue (et reprise via --resume).
+    /// Max number of CLI processes alive at once. Beyond that, the oldest idle
+    /// session is suspended (and resumed with --resume).
     pub max_live: usize,
-    /// Minutes d'inactivité avant de suspendre le processus d'une session.
+    /// Minutes of inactivity before a session's process is suspended.
     pub idle_minutes: u64,
     pub default_model: Option<String>,
-    /// low | medium | high | xhigh | max (None = défaut du CLI).
+    /// low | medium | high | xhigh | max (None = CLI default).
     pub default_effort: Option<String>,
     pub default_permission_mode: String,
-    /// "all" = configuration MCP standard du CLI ; "selected" = uniquement `mcp_selected`.
+    /// "all" = the CLI's standard MCP configuration; "selected" = only `mcp_selected`.
     pub mcp_mode: String,
     pub mcp_selected: Vec<String>,
-    /// Streaming du texte en cours de génération (--include-partial-messages).
+    /// Streaming of text while it is generated (--include-partial-messages).
     pub partial_messages: bool,
-    /// Garder les outils lourds et rares (`HEAVY_TOOLS`), retirés par défaut.
+    /// Keep the heavy, rarely used tools (`HEAVY_TOOLS`), removed by default.
     pub all_tools: bool,
     pub recent_dirs: Vec<String>,
+    /// Interface language: "en" (default), "fr", or "system" (macOS preferred languages).
+    pub language: String,
 }
 
-/// Outils du CLI chargés dans chaque requête alors qu'ils servent rarement : Workflow
-/// (≈2,7k tokens) et ScheduleWakeup, utilisé seulement par /loop (≈2,5k). Mesuré avec
-/// `get_context_usage` sur le CLI 2.1.319 ; les autres outils rares sont déjà différés.
+/// CLI tools loaded in every request though they are rarely used: Workflow
+/// (≈2.7k tokens) and ScheduleWakeup, used only by /loop (≈2.5k). Measured with
+/// `get_context_usage` on CLI 2.1.319; the other rare tools are already deferred.
 pub const HEAVY_TOOLS: [&str; 2] = ["Workflow", "ScheduleWakeup"];
 
 impl Default for Settings {
@@ -51,6 +53,7 @@ impl Default for Settings {
             partial_messages: true,
             all_tools: false,
             recent_dirs: vec![],
+            language: "en".into(),
         }
     }
 }
@@ -85,7 +88,7 @@ impl Settings {
     }
 }
 
-/// Modèle et effort que le CLI utilise quand on ne lui en impose aucun.
+/// Model and effort the CLI uses when none is forced on it.
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CliDefaults {
@@ -107,7 +110,7 @@ fn read_cli_defaults(files: &[PathBuf]) -> CliDefaults {
     out
 }
 
-/// Du moins au plus prioritaire : réglages utilisateur, projet, puis projet local.
+/// From lowest to highest priority: user settings, project, then local project.
 pub fn cli_defaults(cwd: Option<&str>) -> CliDefaults {
     let mut files = vec![dirs::home_dir().unwrap_or_default().join(".claude/settings.json")];
     if let Some(c) = cwd.filter(|c| !c.is_empty()) {
@@ -129,13 +132,13 @@ mod tests {
     }
 
     #[test]
-    fn oublie_les_defauts_implicites_une_seule_fois() {
+    fn drops_implicit_defaults_only_once() {
         let old = temp("old.json", r#"{"defaultModel":"haiku","defaultEffort":"high","defaultPermissionMode":"auto","recentDirs":["/a"]}"#);
         let s = Settings::load(&old);
         assert_eq!((s.default_model.as_deref(), s.default_effort.as_deref()), (None, None));
         assert_eq!((s.default_permission_mode.as_str(), s.recent_dirs.len()), ("auto", 1));
 
-        // Une fois migrés, les choix faits dans les réglages restent.
+        // Once migrated, choices made in the settings stay.
         let mut chosen = s.clone();
         chosen.default_model = Some("sonnet".into());
         chosen.save(&old).unwrap();
@@ -144,10 +147,10 @@ mod tests {
     }
 
     #[test]
-    fn le_projet_prime_sur_l_utilisateur() {
+    fn project_overrides_user() {
         let user = temp("user.json", r#"{"model":"opus","effortLevel":"xhigh"}"#);
         let project = temp("project.json", r#"{"effortLevel":"low"}"#);
-        let broken = temp("broken.json", "{pas du json");
+        let broken = temp("broken.json", "{not json");
         let d = read_cli_defaults(&[user.clone(), project.clone(), broken.clone(), PathBuf::from("/absent.json")]);
         assert_eq!((d.model.as_deref(), d.effort.as_deref()), (Some("opus"), Some("low")));
         for f in [user, project, broken] {

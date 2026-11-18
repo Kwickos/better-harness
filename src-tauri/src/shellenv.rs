@@ -1,7 +1,7 @@
-//! Une app lancée depuis le Finder n'hérite pas du PATH du shell : `claude`, `npx`,
-//! `uv`… seraient introuvables pour le CLI et ses serveurs MCP. On lit le PATH une
-//! seule fois via un shell de login (Claude Desktop fait pareil avec son
-//! « Shell Environment Extractor »).
+//! An app launched from the Finder does not inherit the shell PATH: `claude`, `npx`,
+//! `uv`… would be missing for the CLI and its MCP servers. The PATH is read once
+//! through a login shell (Claude Desktop does the same with its
+//! "Shell Environment Extractor").
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -37,7 +37,7 @@ async fn read_login_path() -> Option<String> {
     (!p.is_empty()).then_some(p)
 }
 
-/// PATH à transmettre au CLI (résolu une fois, puis mis en cache).
+/// PATH passed to the CLI (resolved once, then cached).
 pub async fn path() -> &'static str {
     SHELL_PATH
         .get_or_init(|| async {
@@ -58,7 +58,7 @@ fn is_executable(p: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Trouve le binaire `claude` : réglage explicite, puis PATH du shell, puis emplacements connus.
+/// Finds the `claude` binary: explicit setting, then shell PATH, then known locations.
 pub async fn resolve_claude(explicit: Option<&str>) -> Option<PathBuf> {
     if let Some(p) = explicit.filter(|s| !s.trim().is_empty()) {
         let p = PathBuf::from(p.trim());

@@ -1,4 +1,4 @@
-// Pont typé vers le cœur Rust (src-tauri/src/commands.rs).
+// Typed bridge to the Rust core (src-tauri/src/commands.rs).
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -58,7 +58,7 @@ export interface RateLimitEv {
   windows?: UsageWindows | null;
 }
 
-/** Fenêtres de limite du compte : part utilisée (0 à 1) et réinitialisation (secondes depuis l'epoch). */
+/** Account limit windows: share used (0 to 1) and reset time (seconds since the epoch). */
 export type UsageWindows = Record<string, { utilization: number; resetsAt: number }>;
 
 export interface InitEv {
@@ -77,11 +77,11 @@ export interface ToolResultEv {
   isError: boolean;
   text: string;
   truncated: boolean;
-  /** Le résultat structuré désigne un artefact. */
+  /** The structured result points to an artifact. */
   artifact?: { url: string; title: string | null; path: string | null } | null;
 }
 
-/** Un artefact de la conversation : son adresse sur claude.ai et, s'il y en a un, son fichier local. */
+/** An artifact of the conversation: its claude.ai address and, if there is one, its local file. */
 export interface Artifact {
   url: string;
   title: string;
@@ -97,7 +97,7 @@ export interface ModelInfo {
   supportedEffortLevels?: string[];
 }
 
-/** Modèle et effort que le CLI utilise quand on ne lui en impose aucun. */
+/** Model and effort the CLI uses when none is imposed on it. */
 export interface CliDefaults {
   model: string | null;
   effort: string | null;
@@ -213,9 +213,11 @@ export interface Settings {
   partialMessages: boolean;
   allTools: boolean;
   recentDirs: string[];
+  /** "en" (default), "fr" or "system" (src/i18n.ts). */
+  language: string;
 }
 
-/** État des mises à jour automatiques (src-tauri/src/updates.rs). */
+/** State of automatic updates (src-tauri/src/updates.rs). */
 export type UpdateState =
   | { state: "idle" | "checking" | "upToDate" }
   | { state: "downloading" | "ready"; version: string }
@@ -275,6 +277,7 @@ export const tauriApi = {
   metrics: () => invoke<Metrics>("get_metrics"),
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
+  setLanguage: (lang: string) => invoke<void>("set_language", { lang }),
   appInfo: () => invoke<AppInfo>("app_info"),
   setEffort: (sid: string, effort: string | null) => invoke<void>("set_effort", { sid, effort }),
   setAdvisor: (sid: string, advisor: string | null) => invoke<void>("set_advisor", { sid, advisor }),
@@ -301,36 +304,36 @@ export const tauriApi = {
   simAttach: (udid: string) => invoke<void>("sim_attach", { udid }),
   simDetach: () => invoke<void>("sim_detach"),
   simSelect: (udid: string | null) => invoke<void>("sim_select", { udid }),
-  /** Une image JPEG, ou un tampon vide si l'écran n'a pas changé. */
+  /** A JPEG image, or an empty buffer if the screen hasn't changed. */
   simFrame: () => invoke<ArrayBuffer>("sim_frame"),
   simInput: (line: string) => invoke<void>("sim_input", { line }),
   simScreenshot: (udid: string) => invoke<string>("sim_screenshot", { udid }),
   simAppearance: (udid: string, value?: "light" | "dark") => invoke<string>("sim_appearance", { udid, value: value ?? null }),
   attachments: async (cwd: string, paths: string[]) =>
     (await invoke<Attachment[]>("attachments", { cwd, paths })).map((a) => (a.image ? { ...a, url: convertFileSrc(a.path) } : a)),
-  /** `false` : le fichier pourrait s'exécuter, il vaut mieux le montrer dans le Finder. */
+  /** `false`: the file could run, better to show it in the Finder. */
   openAttachment: (path: string) => invoke<boolean>("open_attachment", { path }),
   updateStatus: () => invoke<UpdateState>("update_status"),
-  /** Cherche une version plus récente et la télécharge. */
+  /** Looks for a newer version and downloads it. */
   updateCheck: () => invoke<UpdateState>("update_check"),
-  /** Installe la version téléchargée et relance l'app. */
+  /** Installs the downloaded version and relaunches the app. */
   updateInstall: () => invoke<void>("update_install"),
   onUpdate: async (cb: (s: UpdateState) => void) => {
     await listen<UpdateState>("update", (e) => cb(e.payload));
   },
 };
 
-/** Un fichier que Claude montre dans la conversation (outil `send_files`). */
+/** A file Claude shows in the conversation (`send_files` tool). */
 export interface Attachment {
   path: string;
   name: string;
   exists: boolean;
   size: number;
   image: boolean;
-  /** Dimensions lues dans l'en-tête de l'image, quand le format le permet. */
+  /** Dimensions read from the image header, when the format allows it. */
   width: number | null;
   height: number | null;
-  /** Adresse de l'image pour la vue, ajoutée côté interface. */
+  /** Image address for the view, added on the UI side. */
   url?: string;
 }
 

@@ -1,7 +1,7 @@
-//! L'outil MCP qui laisse Claude joindre des fichiers à la conversation : les images s'y affichent
-//! en aperçu, les autres fichiers en carte qui s'ouvre dans leur app. Servi comme `simulator_tool`
-//! (serveur « sdk » sur le canal stream-json), sans processus de plus. L'outil ne renvoie rien du
-//! contenu au modèle : il montre un fichier à l'utilisateur, d'où son autorisation sans demande.
+//! The MCP tool that lets Claude attach files to the conversation: images show as previews,
+//! other files as cards that open in their app. Served like `simulator_tool` ("sdk" server on
+//! the stream-json channel), with no extra process. The tool returns nothing of the content to
+//! the model: it shows a file to the user, hence its approval without a prompt.
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 pub const SERVER: &str = "harness";
 pub const TOOL: &str = "mcp__harness__send_files";
 pub const CONFIG: &str = r#"{"mcpServers":{"harness":{"type":"sdk","name":"harness"}}}"#;
-/// Ajouté au prompt système : un outil MCP reste différé, Claude doit savoir qu'il existe.
+/// Appended to the system prompt: an MCP tool stays deferred, Claude must know it exists.
 pub const PROMPT: &str = "This conversation is shown in the Better Harness desktop chat. To show the user an image or any \
 other file (a screenshot, a generated image, a chart, a PDF, an export), call mcp__harness__send_files with its path: \
 images appear inline with a preview.";
@@ -23,7 +23,7 @@ The files must already exist; paths are absolute or relative to the working dire
 
 const IMAGE_EXT: [&str; 14] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "tif", "tiff", "heic", "heif", "avif", "apng"];
 
-/// Fichiers qu'« Ouvrir » ne doit pas lancer : un script ou un raccourci s'exécuterait au lieu de s'afficher.
+/// Files "Open" must not launch: a script or a shortcut would run instead of showing.
 const RUNNABLE_EXT: [&str; 20] = [
     "command", "tool", "terminal", "sh", "bash", "zsh", "csh", "ksh", "fish", "app", "pkg", "mpkg", "jar", "workflow", "scpt",
     "applescript", "webloc", "inetloc", "fileloc", "shortcut",
@@ -45,7 +45,7 @@ fn tool() -> Value {
     })
 }
 
-/// Répond à un message JSON-RPC du CLI.
+/// Answers a JSON-RPC message from the CLI.
 pub fn handle(cwd: &str, message: &Value) -> Value {
     let id = message["id"].clone();
     let result = match message["method"].as_str() {
@@ -60,14 +60,14 @@ pub fn handle(cwd: &str, message: &Value) -> Value {
             Err(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": true }),
         },
         Some("ping") => json!({}),
-        // Une notification n'attend pas de réponse.
+        // A notification expects no answer.
         _ if id.is_null() => return json!({}),
-        _ => return json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Méthode inconnue" } }),
+        _ => return json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Method not found" } }),
     };
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
 
-/// Les chemins demandés : une liste, ou un seul chemin passé en chaîne.
+/// The requested paths: a list, or a single path passed as a string.
 pub fn requested(args: &Value) -> Vec<String> {
     let files = &args["files"];
     let list: Vec<String> = match files {
@@ -98,7 +98,7 @@ fn join(paths: &[&String]) -> String {
     paths.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", ")
 }
 
-/// Chemin absolu : `~` vaut le dossier personnel, un chemin relatif part du dossier de la conversation.
+/// Absolute path: `~` is the home folder, a relative path starts from the conversation's folder.
 pub fn resolve(cwd: &str, path: &str) -> PathBuf {
     let p = path.trim();
     let p = p.strip_prefix("file://").unwrap_or(p);
@@ -117,7 +117,7 @@ fn extension(path: &Path) -> String {
     path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase()
 }
 
-/// Ce que l'interface affiche d'un fichier joint.
+/// What the UI shows of an attached file.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attachment {
@@ -126,7 +126,7 @@ pub struct Attachment {
     pub exists: bool,
     pub size: u64,
     pub image: bool,
-    /// Dimensions lues dans l'en-tête de l'image : l'aperçu a sa taille avant d'être chargé.
+    /// Dimensions read from the image header: the preview has its size before it loads.
     pub width: Option<u32>,
     pub height: Option<u32>,
 }
@@ -152,7 +152,7 @@ pub fn describe(cwd: &str, path: &str) -> Attachment {
     }
 }
 
-/// Un fichier qu'« Ouvrir » peut confier à son app sans rien exécuter.
+/// A file "Open" can hand to its app without running anything.
 pub fn safe_to_open(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     let Ok(meta) = std::fs::metadata(path) else { return false };
@@ -164,7 +164,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn chemins_resolus() {
+    fn resolved_paths() {
         assert_eq!(resolve("/a/b", "c.png"), PathBuf::from("/a/b/c.png"));
         assert_eq!(resolve("/a/b", " /x/y.png "), PathBuf::from("/x/y.png"));
         assert_eq!(resolve("/a/b", "file:///x/y.png"), PathBuf::from("/x/y.png"));
@@ -172,17 +172,17 @@ mod tests {
     }
 
     #[test]
-    fn fichiers_demandes() {
+    fn requested_files() {
         assert_eq!(requested(&json!({ "files": ["a.png", " ", "b.pdf"] })), vec!["a.png", "b.pdf"]);
         assert_eq!(requested(&json!({ "files": "a.png" })), vec!["a.png"]);
         assert!(requested(&json!({})).is_empty());
     }
 
     #[test]
-    fn appel_de_l_outil() {
+    fn tool_call() {
         let dir = std::env::temp_dir().join(format!("bh-files-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        // PNG 3 × 2 minimal : signature et en-tête IHDR suffisent à lire la taille.
+        // Minimal 3 × 2 PNG: the signature and IHDR header are enough to read the size.
         let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
         png.extend_from_slice(&[0, 0, 0, 3, 0, 0, 0, 2, 8, 6, 0, 0, 0]);
         std::fs::write(dir.join("a.png"), &png).unwrap();

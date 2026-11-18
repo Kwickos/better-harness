@@ -1,8 +1,9 @@
-//! Lecture de l'historique du CLI dans ~/.claude/projects/<cwd encodé>/<id>.jsonl.
-//! Ces fichiers dépassent parfois 100 Mo : on ne lit que le début et la fin pour
-//! la liste, et on remonte depuis la fin pour charger un transcript.
+//! Reading the CLI history in ~/.claude/projects/<encoded cwd>/<id>.jsonl.
+//! These files sometimes exceed 100 MB: only the start and end are read for
+//! the list, and a transcript is loaded by walking back from the end.
 
 use crate::events::UiEvent;
+use crate::i18n::tr;
 use crate::protocol::{assistant_blocks, tool_result_text, truncate_middle, user_text, TOOL_RESULT_MAX};
 use serde::Serialize;
 use serde_json::Value;
@@ -13,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 const PEEK: u64 = 64 * 1024;
-/// Plafond d'octets lus pour reconstituer un transcript.
+/// Cap on bytes read to rebuild a transcript.
 const TAIL_BUDGET: u64 = 24 * 1024 * 1024;
 
 #[derive(Clone, Serialize)]
@@ -97,8 +98,8 @@ fn summarize(path: &Path) -> Option<HistoryEntry> {
     })
 }
 
-/// Sessions récentes, triées par date. `query` filtre sur le titre et le dossier ;
-/// les conversations de `hidden` (archivées) sont ignorées.
+/// Recent sessions, sorted by date. `query` filters on the title and folder;
+/// conversations in `hidden` (archived) are skipped.
 pub fn list(limit: usize, query: Option<&str>, hidden: &HashSet<String>) -> Vec<HistoryEntry> {
     let mut files: Vec<(u64, PathBuf)> = Vec::new();
     let Ok(dirs) = std::fs::read_dir(projects_dir()) else { return vec![] };
@@ -133,7 +134,7 @@ pub fn list(limit: usize, query: Option<&str>, hidden: &HashSet<String>) -> Vec<
         .collect()
 }
 
-/// Résumés d'une liste de conversations (les archives), de la plus récente à la plus ancienne.
+/// Summaries of a list of conversations (the archive), newest first.
 pub fn entries(ids: &HashSet<String>) -> Vec<HistoryEntry> {
     let mut out: Vec<HistoryEntry> = ids.iter().filter_map(|id| summarize(&find_file(id)?)).collect();
     out.sort_unstable_by(|a, b| b.mtime_ms.cmp(&a.mtime_ms));
@@ -144,7 +145,7 @@ fn valid_id(cli_id: &str) -> bool {
     !cli_id.is_empty() && !cli_id.contains('/') && !cli_id.contains("..")
 }
 
-/// Fichiers d'une conversation : son transcript et son dossier annexe (sous-agents, résultats d'outils).
+/// A conversation's files: its transcript and its side folder (subagents, tool results).
 fn conversation_paths(cli_id: &str) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if !valid_id(cli_id) {
@@ -163,7 +164,7 @@ fn conversation_paths(cli_id: &str) -> Vec<PathBuf> {
     paths
 }
 
-/// Met une conversation à la corbeille : elle reste récupérable depuis le Finder.
+/// Moves a conversation to the Trash: it stays recoverable from the Finder.
 pub fn trash(cli_id: &str) -> Result<(), String> {
     let paths = conversation_paths(cli_id);
     if paths.is_empty() {
@@ -175,13 +176,13 @@ pub fn trash(cli_id: &str) -> Result<(), String> {
 pub fn to_trash(paths: &[PathBuf]) -> Result<(), String> {
     #[allow(unused_mut)]
     let mut ctx = trash::TrashContext::default();
-    // NSFileManager : ni autorisation à demander au Finder, ni son de corbeille.
+    // NSFileManager: no Finder permission to ask for, no trash sound.
     #[cfg(target_os = "macos")]
     {
         use trash::macos::{DeleteMethod, TrashContextExtMacos};
         ctx.set_delete_method(DeleteMethod::NsFileManager);
     }
-    ctx.delete_all(paths).map_err(|e| format!("Impossible de mettre à la corbeille : {e}"))
+    ctx.delete_all(paths).map_err(|e| tr(format!("Could not move to the Trash: {e}"), format!("Impossible de mettre à la corbeille : {e}")))
 }
 
 pub fn find_file(cli_id: &str) -> Option<PathBuf> {
@@ -196,13 +197,13 @@ pub fn find_file(cli_id: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// Date de dernière modification du transcript d'une session (ms depuis l'epoch).
+/// Last modification date of a session's transcript (ms since the epoch).
 pub fn mtime_ms(cli_id: &str) -> Option<u64> {
     let m = std::fs::metadata(find_file(cli_id)?).ok()?.modified().ok()?;
     Some(m.duration_since(UNIX_EPOCH).ok()?.as_millis() as u64)
 }
 
-/// Lit les `want` dernières lignes utiles du fichier, en remontant depuis la fin.
+/// Reads the last `want` useful lines of the file, walking back from the end.
 fn tail_lines(path: &Path, want: usize) -> (Vec<String>, bool) {
     let Ok(mut f) = File::open(path) else { return (vec![], false) };
     let size = f.metadata().map(|m| m.len()).unwrap_or(0);
@@ -222,7 +223,7 @@ fn tail_lines(path: &Path, want: usize) -> (Vec<String>, bool) {
         read_total += buf.len() as u64;
         buf.extend_from_slice(&carry);
         let mut lines: Vec<&[u8]> = buf.split(|b| *b == b'\n').collect();
-        // La première ligne du bloc est peut-être incomplète : on la garde pour le tour suivant.
+        // The chunk's first line may be incomplete: keep it for the next round.
         let first = if start > 0 { lines.remove(0).to_vec() } else { vec![] };
         for l in lines.into_iter().rev() {
             if out.len() >= want {
@@ -241,7 +242,7 @@ fn tail_lines(path: &Path, want: usize) -> (Vec<String>, bool) {
     (out, pos > 0)
 }
 
-/// Reconstitue les derniers messages d'une session sous forme d'événements UI.
+/// Rebuilds a session's last messages as UI events.
 pub fn load(sid: &str, cli_id: &str, want: usize) -> (Vec<UiEvent>, bool) {
     let Some(path) = find_file(cli_id) else { return (vec![], false) };
     let (lines, more) = tail_lines(&path, want);
@@ -296,14 +297,14 @@ pub fn load(sid: &str, cli_id: &str, want: usize) -> (Vec<UiEvent>, bool) {
 mod tests {
     use super::*;
 
-    /// HOME factice : ces tests ne doivent jamais toucher au vrai historique.
+    /// Fake HOME: these tests must never touch the real history.
     fn fake_home() -> PathBuf {
         let home = std::env::temp_dir().join(format!("bh-history-{}", uuid::Uuid::new_v4()));
         let project = home.join(".claude/projects/-tmp-demo");
         std::fs::create_dir_all(project.join("aaa/subagents")).unwrap();
-        let line = |title: &str| format!("{{\"type\":\"custom-title\",\"customTitle\":\"{title}\"}}\n{{\"type\":\"user\",\"cwd\":\"/tmp/demo\",\"message\":{{\"content\":\"salut\"}}}}\n");
-        std::fs::write(project.join("aaa.jsonl"), line("Première")).unwrap();
-        std::fs::write(project.join("bbb.jsonl"), line("Seconde")).unwrap();
+        let line = |title: &str| format!("{{\"type\":\"custom-title\",\"customTitle\":\"{title}\"}}\n{{\"type\":\"user\",\"cwd\":\"/tmp/demo\",\"message\":{{\"content\":\"hello\"}}}}\n");
+        std::fs::write(project.join("aaa.jsonl"), line("First")).unwrap();
+        std::fs::write(project.join("bbb.jsonl"), line("Second")).unwrap();
         std::env::set_var("HOME", &home);
         home
     }
@@ -313,22 +314,22 @@ mod tests {
         let home = fake_home();
         assert_eq!(projects_dir(), home.join(".claude/projects"));
 
-        // Une conversation archivée quitte la liste mais reste lisible dans les archives.
+        // An archived conversation leaves the list but stays readable in the archive.
         let hidden: HashSet<String> = ["aaa".to_string()].into();
         let titles: Vec<_> = list(10, None, &hidden).into_iter().map(|e| e.title).collect();
-        assert_eq!(titles, ["Seconde"]);
+        assert_eq!(titles, ["Second"]);
         assert_eq!(list(10, None, &HashSet::new()).len(), 2);
         let archived = entries(&hidden);
-        assert_eq!((archived.len(), archived[0].title.as_str()), (1, "Première"));
+        assert_eq!((archived.len(), archived[0].title.as_str()), (1, "First"));
 
-        // La suppression vise le transcript et son dossier annexe, rien d'autre.
+        // Deletion targets the transcript and its side folder, nothing else.
         let project = home.join(".claude/projects/-tmp-demo");
         let mut paths = conversation_paths("aaa");
         paths.sort();
         assert_eq!(paths, [project.join("aaa"), project.join("aaa.jsonl")]);
         assert_eq!(conversation_paths("bbb"), [project.join("bbb.jsonl")]);
 
-        // Identifiants hostiles : aucun chemin n'en sort.
+        // Hostile IDs: no path comes out of them.
         for id in ["", "..", "../..", "a/b", "../-tmp-demo/aaa"] {
             assert!(conversation_paths(id).is_empty(), "{id}");
         }
@@ -337,7 +338,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(home);
     }
 
-    /// Dépose un vrai fichier de test dans la corbeille : à lancer à la main avec `--ignored`.
+    /// Puts a real test file in the Trash: run by hand with `--ignored`.
     #[test]
     #[ignore]
     fn trash_moves_files_out() {

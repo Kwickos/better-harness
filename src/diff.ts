@@ -1,7 +1,8 @@
-// Diffs : rendu des lignes, diff des outils d'édition (Edit, Write…) et onglet « Modifications ».
+// Diffs: line rendering, diffs of editing tools (Edit, Write…) and the "Changes" tab.
 import type { Api, GitDiff, GitFile, GitStatus } from "./api";
 import { icon } from "./icons";
 import { wrapWithCopy } from "./copy";
+import { t } from "./i18n";
 import { confirmMenu } from "./menu";
 import { el } from "./transcript";
 
@@ -11,11 +12,11 @@ export interface DiffLine {
   no?: number;
 }
 
-/** Au-delà, le navigateur peine : on coupe et on le dit. */
+/** Beyond this, the browser struggles: cut and say so. */
 const MAX_LINES = 3000;
-/** Au-delà, déplier se fait sans animation pour ne pas recalculer la mise en page à chaque image. */
+/** Beyond this, expanding is not animated, so layout isn't recomputed on every frame. */
 const ANIMATED_LINES = 500;
-/** Taille maximale comparée ligne à ligne ; au-delà, le bloc est affiché comme remplacé. */
+/** Largest size compared line by line; beyond it, the block shows as replaced. */
 const LCS_LINES = 80;
 const CONTEXT = 2;
 
@@ -33,7 +34,7 @@ export function parseUnified(text: string): DiffLine[] {
       oldNo = Number(m[1]);
       newNo = Number(m[2]);
       inHunk = true;
-      out.push({ kind: "hunk", text: m[3] || `Ligne ${newNo}` });
+      out.push({ kind: "hunk", text: m[3] || t("Line {n}", { n: newNo }) });
     } else if (!inHunk) {
       continue;
     } else if (line.startsWith("+")) {
@@ -50,7 +51,7 @@ export function parseUnified(text: string): DiffLine[] {
   return out;
 }
 
-/** Plus longue sous-suite commune, pour ne marquer que les lignes qui changent vraiment. */
+/** Longest common subsequence, to only mark lines that really change. */
 function lcsLines(a: string[], b: string[]): DiffLine[] {
   const table = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
   for (let i = a.length - 1; i >= 0; i--) {
@@ -67,7 +68,7 @@ function lcsLines(a: string[], b: string[]): DiffLine[] {
       i++;
       j++;
     } else if (i < a.length && (j === b.length || table[i + 1][j] >= table[i][j + 1])) {
-      // À égalité, le retrait passe avant l'ajout, comme dans un diff Git.
+      // On a tie, the removal comes before the addition, as in a Git diff.
       out.push({ kind: "del", text: a[i++] });
     } else {
       out.push({ kind: "add", text: b[j++] });
@@ -102,7 +103,7 @@ export interface ToolDiff {
   removed: number;
 }
 
-/** Diff d'un appel d'outil d'édition, ou null si l'entrée n'en décrit pas un. */
+/** Diff of an editing tool call, or null if the input doesn't describe one. */
 export function toolDiff(name: string, input: string): ToolDiff | null {
   if (!["Edit", "MultiEdit", "Write", "NotebookEdit"].includes(name)) return null;
   let o: Record<string, unknown>;
@@ -117,7 +118,7 @@ export function toolDiff(name: string, input: string): ToolDiff | null {
     lines = editLines(o.old_string as string, o.new_string as string);
   } else if (name === "MultiEdit" && Array.isArray(o.edits)) {
     lines = (o.edits as Record<string, unknown>[]).flatMap((e, i) => [
-      ...(i ? [{ kind: "hunk" as const, text: `Modification ${i + 1}` }] : []),
+      ...(i ? [{ kind: "hunk" as const, text: t("Edit {n}", { n: i + 1 }) }] : []),
       ...editLines(str(e.old_string) ?? "", str(e.new_string) ?? ""),
     ]);
   } else if (name === "Write" && str(o.content) !== null) {
@@ -145,10 +146,10 @@ export function renderLines(lines: DiffLine[], truncated = false): HTMLElement {
     inner.append(row);
   }
   box.append(inner);
-  if (truncated || lines.length > MAX_LINES) box.append(el("div", "d-hunk", "Diff tronqué : il est trop long pour être affiché en entier."));
-  // Ce qu'on veut réutiliser d'un diff, c'est le code qu'il produit.
+  if (truncated || lines.length > MAX_LINES) box.append(el("div", "d-hunk", t("Diff truncated: too long to show in full.")));
+  // What you want to reuse from a diff is the code it produces.
   const after = () => lines.filter((l) => l.kind === "add" || l.kind === "ctx").map((l) => l.text).join("\n");
-  return wrapWithCopy(box, after, "Copier le nouveau code");
+  return wrapWithCopy(box, after, t("Copy new code"));
 }
 
 export function countsLabel(added: number | null | undefined, removed: number | null | undefined): HTMLElement {
@@ -158,7 +159,7 @@ export function countsLabel(added: number | null | undefined, removed: number | 
   return box;
 }
 
-// ---------------------------------------------------------------- onglet « Modifications »
+// ---------------------------------------------------------------- "Changes" tab
 
 interface DiffDeps {
   api: Api;
@@ -194,8 +195,8 @@ export function initDiffTab(d: DiffDeps) {
     total.replaceChildren(countsLabel(files.reduce((n, f) => n + (f.added ?? 0), 0), files.reduce((n, f) => n + (f.removed ?? 0), 0)));
     const empty = $("diff-empty");
     empty.hidden = files.length > 0;
-    $("diff-empty-title").textContent = s?.isRepo ? "Aucune modification" : "Pas de dépôt Git";
-    $("diff-empty-sub").textContent = s?.isRepo ? "Les fichiers modifiés apparaîtront ici." : "Ce dossier n'est pas suivi par Git.";
+    $("diff-empty-title").textContent = s?.isRepo ? t("No changes") : t("Not a Git repository");
+    $("diff-empty-sub").textContent = s?.isRepo ? t("Changed files will appear here.") : t("This folder isn't tracked by Git.");
     $("diff-list").replaceChildren(...files.map(fileRow));
     $("diff-note").hidden = !s?.truncated;
   }
@@ -213,8 +214,8 @@ export function initDiffTab(d: DiffDeps) {
     row.append(name);
     if (cut > 0) row.append(el("span", "diff-dir", f.path.slice(0, cut)));
     else row.append(el("span", "diff-dir"));
-    if (f.status === "U") row.append(el("span", "srv-meta is-bad", "conflit"));
-    else if (f.added === null && f.removed === null) row.append(el("span", "srv-meta", "binaire"));
+    if (f.status === "U") row.append(el("span", "srv-meta is-bad", t("conflict")));
+    else if (f.added === null && f.removed === null) row.append(el("span", "srv-meta", t("binary")));
     else row.append(countsLabel(f.added, f.removed));
 
     const fold = el("div", `fold${isOpen ? "" : " is-closed"}`);
@@ -244,7 +245,7 @@ export function initDiffTab(d: DiffDeps) {
       const b = el("button", "icon-btn diff-act");
       b.type = "button";
       b.title = title;
-      b.setAttribute("aria-label", `${title} : ${f.path}`);
+      b.setAttribute("aria-label", t("{action}: {path}", { action: title, path: f.path }));
       b.innerHTML = icon(ic);
       b.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -252,8 +253,8 @@ export function initDiffTab(d: DiffDeps) {
       });
       row.append(b);
     };
-    if (f.status !== "D") action("folder", "Afficher dans le Finder", () => status && d.reveal(`${status.root}/${f.path}`));
-    if (f.status !== "U") action("undo", "Rétablir", (b) => confirmDiscard(f, b));
+    if (f.status !== "D") action("folder", t("Show in Finder"), () => status && d.reveal(`${status.root}/${f.path}`));
+    if (f.status !== "U") action("undo", t("Revert"), (b) => confirmDiscard(f, b));
 
     li.append(row, fold);
     if (isOpen) void fill(f, inner, fold);
@@ -270,8 +271,8 @@ export function initDiffTab(d: DiffDeps) {
     }
     const lines = page.binary ? [] : parseUnified(page.text);
     fold.classList.toggle("no-anim", lines.length > ANIMATED_LINES);
-    if (page.binary) inner.replaceChildren(el("p", "diff-note", "Fichier binaire."));
-    else if (!lines.length) inner.replaceChildren(el("p", "diff-note", "Aucune différence de contenu."));
+    if (page.binary) inner.replaceChildren(el("p", "diff-note", t("Binary file.")));
+    else if (!lines.length) inner.replaceChildren(el("p", "diff-note", t("No content differences.")));
     else inner.replaceChildren(renderLines(lines, page.truncated));
   }
 
@@ -279,9 +280,9 @@ export function initDiffTab(d: DiffDeps) {
     const isNew = f.status === "?" || f.status === "A";
     confirmMenu(
       anchor,
-      isNew ? "Retirer ce nouveau fichier ?" : "Rétablir la dernière version ?",
-      isNew ? "Il part à la corbeille." : "La version actuelle part à la corbeille.",
-      isNew ? "Retirer" : "Rétablir",
+      isNew ? t("Remove this new file?") : t("Revert to the last version?"),
+      isNew ? t("It goes to the Trash.") : t("The current version goes to the Trash."),
+      isNew ? t("Remove") : t("Revert"),
       async () => {
         await d.guard(d.api.gitDiscard(d.cwd(), f.path));
         await refresh(true);

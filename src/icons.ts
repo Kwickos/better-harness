@@ -1,4 +1,4 @@
-// Icônes Phosphor (MIT, https://phosphoricons.com), intégrées au build en SVG brut.
+// Phosphor icons (MIT, https://phosphoricons.com), bundled as raw SVG.
 import appWindow from "@phosphor-icons/core/assets/regular/app-window.svg?raw";
 import archive from "@phosphor-icons/core/assets/regular/archive.svg?raw";
 import arrowCircleUp from "@phosphor-icons/core/assets/regular/arrow-circle-up.svg?raw";

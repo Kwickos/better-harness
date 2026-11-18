@@ -1,9 +1,10 @@
-// Panneau latéral : navigateur intégré (vraie WKWebView placée par le cœur Rust),
-// serveurs (dev servers du projet + serveurs MCP de la conversation), modifications et simulateur iOS.
+// Side panel: built-in browser (a real WKWebView placed by the Rust core),
+// servers (the project's dev servers + the conversation's MCP servers), changes and iOS simulator.
 import type { Api, Artifact, McpServerStatus, Rect, ServerInfo, UiEvent } from "./api";
 import { initArtifactTab } from "./artifacts";
 import { copyButton } from "./copy";
 import { initDiffTab } from "./diff";
+import { t, tp } from "./i18n";
 import { icon } from "./icons";
 import { menuElement, onMenuChange } from "./menu";
 import { DIST, DUR, enter, iconIn, leave, staggerIn } from "./motion";
@@ -12,8 +13,8 @@ import { el } from "./transcript";
 
 type Tab = "browser" | "servers" | "diff" | "simulator" | "artifacts";
 
-/** État affiché à côté d'un serveur MCP : rien tant que tout va bien. */
-const MCP_STATES: Record<string, string> = { connected: "", disabled: "", failed: "échec", pending: "connexion…", "needs-auth": "à authentifier" };
+/** State shown next to an MCP server (translated when shown): nothing while all is well. */
+const MCP_STATES: Record<string, string> = { connected: "", disabled: "", failed: "failed", pending: "connecting…", "needs-auth": "needs auth" };
 
 interface Deps {
   api: Api;
@@ -41,7 +42,7 @@ const store = {
     try {
       localStorage.setItem(`bh.${k}`, v);
     } catch {
-      /* préférence non mémorisée */
+      /* preference not remembered */
     }
   },
 };
@@ -86,7 +87,7 @@ export function initPanel(d: Deps) {
   if (savedW > 300) panel.style.width = `${savedW}px`;
 
   function render() {
-    // Le panneau glisse sans changer de largeur : la conversation n'est mise en page qu'une fois.
+    // The panel slides without changing width: the conversation is laid out only once.
     const fresh = open && (!wasOpen || shownTab !== tab);
     if (open) {
       panel.classList.remove("is-closing");
@@ -116,9 +117,9 @@ export function initPanel(d: Deps) {
     }
     wasOpen = open;
     shownTab = tab;
-    for (const t of ["browser", "servers", "diff", "simulator", "artifacts"] as const) {
-      $(`toggle-${t}`).setAttribute("aria-pressed", String(open && tab === t));
-      $(`tab-${t}`).hidden = tab !== t;
+    for (const id of ["browser", "servers", "diff", "simulator", "artifacts"] as const) {
+      $(`toggle-${id}`).setAttribute("aria-pressed", String(open && tab === id));
+      $(`tab-${id}`).hidden = tab !== id;
     }
     if (open && tab === "servers") void refreshServers().then(() => fresh && staggerIn([...$("tab-servers").querySelectorAll<HTMLElement>(".srv")]));
     if (open && tab === "diff") void diffTab.refresh().then(() => fresh && staggerIn([...$("diff-list").querySelectorAll<HTMLElement>(".diff-file")]));
@@ -129,7 +130,7 @@ export function initPanel(d: Deps) {
     syncBrowser();
   }
 
-  /** Le bouton n'existe que pour une conversation qui a des artefacts, ou tant que l'onglet est ouvert. */
+  /** The button only exists for a conversation that has artifacts, or while the tab is open. */
   function renderArtifactToggle() {
     const button = $("toggle-artifacts");
     const wanted = d.artifacts().length > 0 || (open && tab === "artifacts");
@@ -141,11 +142,11 @@ export function initPanel(d: Deps) {
     }
   }
 
-  function toggle(t: Tab) {
-    if (open && tab === t) open = false;
+  function toggle(next: Tab) {
+    if (open && tab === next) open = false;
     else {
       open = true;
-      tab = t;
+      tab = next;
     }
     store.set("panel.open", open ? "1" : "0");
     store.set("panel.tab", tab);
@@ -153,7 +154,7 @@ export function initPanel(d: Deps) {
     if (open && tab === "browser" && !live) urlIn.focus();
   }
 
-  // ------------------------------------------------------------ navigateur
+  // ------------------------------------------------------------ browser
 
   const rect = (): Rect => {
     const r = view.getBoundingClientRect();
@@ -187,9 +188,9 @@ export function initPanel(d: Deps) {
     return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
   }
 
-  // La vue native passe au-dessus du HTML : on l'écarte quand un dialogue ou un menu la recouvrirait.
-  // Masquer est immédiat (un rAF peut être suspendu si la fenêtre est cachée) ;
-  // seuls les repositionnements sont regroupés par image.
+  // The native view sits above the HTML: move it away when a dialog or a menu would cover it.
+  // Hiding is immediate (a rAF can be suspended while the window is hidden);
+  // only repositioning is batched per frame.
   let queued = false;
   const shouldShow = () => open && tab === "browser" && !opening && !document.querySelector("dialog[open]") && !overlapsMenu();
   function syncBrowser() {
@@ -243,7 +244,7 @@ export function initPanel(d: Deps) {
   }
   $("b-external").addEventListener("click", () => browserUrl && d.openExternal(browserUrl));
 
-  // ------------------------------------------------------------ serveurs de dev
+  // ------------------------------------------------------------ dev servers
 
   async function refreshServers() {
     const cwd = d.cwd();
@@ -253,11 +254,11 @@ export function initPanel(d: Deps) {
     renderEmpty();
   }
 
-  /** Les sections vides disparaissent ; s'il n'en reste aucune, une seule phrase. */
+  /** Empty sections disappear; if none is left, a single sentence. */
   function renderServersEmpty() {
     const none = servers.length === 0 && !mcp?.length;
     $("srv-empty").hidden = !none;
-    $("srv-empty-sub").textContent = d.cwd() ? "Ajoute un script dev à package.json, ou un fichier .claude/launch.json." : "Ouvre une conversation pour voir ses serveurs.";
+    $("srv-empty-sub").textContent = d.cwd() ? t("Add a dev script to package.json, or a .claude/launch.json file.") : t("Open a conversation to see its servers.");
   }
 
   function renderServers() {
@@ -275,21 +276,22 @@ export function initPanel(d: Deps) {
     if (running && s.url) {
       const u = el("button", "srv-url", s.url.replace(/^https?:\/\//, ""));
       u.type = "button";
-      u.title = "Ouvrir dans le navigateur intégré";
+      u.title = t("Open in the built-in browser");
       u.addEventListener("click", (e) => {
         e.stopPropagation();
         openUrl(s.url!);
       });
       li.append(u);
     } else if (running) {
-      li.append(el("span", "srv-meta", "en cours"));
+      li.append(el("span", "srv-meta", t("running")));
     } else if (s.state === "crashed") {
-      li.append(el("span", "srv-meta is-bad", "erreur"));
+      li.append(el("span", "srv-meta is-bad", t("error")));
     }
     const run = el("button", "icon-btn srv-act");
     run.type = "button";
-    run.title = running ? "Arrêter" : "Démarrer";
-    run.setAttribute("aria-label", `${run.title} ${s.name}`);
+    run.dataset.action = running ? "stop" : "start";
+    run.title = running ? t("Stop") : t("Start");
+    run.setAttribute("aria-label", running ? t("Stop {name}", { name: s.name }) : t("Start {name}", { name: s.name }));
     run.innerHTML = icon(running ? "stop" : "play");
     run.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -306,7 +308,7 @@ export function initPanel(d: Deps) {
     return li;
   }
 
-  /** Un clic sur la ligne ouvre ou referme son journal ; rien à ouvrir tant qu'il est vide. */
+  /** A click on the row opens or closes its log; nothing to open while it is empty. */
   async function selectServer(s: ServerInfo) {
     if (selected === s.key) {
       selected = null;
@@ -324,12 +326,12 @@ export function initPanel(d: Deps) {
     const s = servers.find((x) => x.key === selected);
     $("logs-box").hidden = !s;
     if (!s) return;
-    $("logs-title").textContent = `Journal de ${s.name}`;
+    $("logs-title").textContent = t("{name} log", { name: s.name });
     const pre = $("logs");
     pre.textContent = (logs.get(s.key) ?? []).join("\n");
     pre.scrollTop = pre.scrollHeight;
   }
-  $("logs-close").before(copyButton(() => $("logs").textContent ?? "", "Copier le journal", "sm"));
+  $("logs-close").before(copyButton(() => $("logs").textContent ?? "", t("Copy log"), "sm"));
   $("logs-close").addEventListener("click", () => {
     selected = null;
     renderServers();
@@ -344,14 +346,14 @@ export function initPanel(d: Deps) {
     renderEmpty();
   }
 
-  // ------------------------------------------------------------ serveurs MCP
+  // ------------------------------------------------------------ MCP servers
 
   let mcpTimer = 0;
   async function refreshMcp() {
     const sid = d.sid();
     mcp = sid ? ((await d.api.mcpStatus(sid).catch(() => null))?.mcpServers ?? null) : null;
     renderMcp();
-    // Un serveur en cours de connexion change d'état tout seul.
+    // A server that is connecting changes state on its own.
     window.clearTimeout(mcpTimer);
     if (open && tab === "servers" && mcp?.some((m) => m.status === "pending")) mcpTimer = window.setTimeout(() => void refreshMcp(), 2000);
   }
@@ -365,16 +367,16 @@ export function initPanel(d: Deps) {
   function mcpRow(m: McpServerStatus): HTMLElement {
     const li = el("li", `srv${m.status === "connected" ? " is-on" : ""}`);
     const tools = m.tools?.length ?? 0;
-    li.title = `${m.transport ?? ""} ${tools} outil${tools > 1 ? "s" : ""}`.trim();
+    li.title = `${m.transport ?? ""} ${tp(tools, "{n} tool", "{n} tools")}`.trim();
     li.append(el("span", "srv-name", m.name));
-    const state = m.status in MCP_STATES ? MCP_STATES[m.status] : m.status;
+    const state = m.status in MCP_STATES ? MCP_STATES[m.status] && t(MCP_STATES[m.status]) : m.status;
     if (state) li.append(el("span", `srv-meta${m.status === "failed" || m.status === "needs-auth" ? " is-bad" : ""}`, state));
     const sid = d.sid();
     if (sid && m.status === "failed") {
       const r = el("button", "icon-btn srv-act");
       r.type = "button";
-      r.title = "Reconnecter";
-      r.setAttribute("aria-label", `Reconnecter ${m.name}`);
+      r.title = t("Reconnect");
+      r.setAttribute("aria-label", t("Reconnect {name}", { name: m.name }));
       r.innerHTML = icon("reload");
       r.addEventListener("click", async () => {
         await d.guard(d.api.mcpReconnect(sid, m.name));
@@ -386,8 +388,8 @@ export function initPanel(d: Deps) {
       const sw = el("input", "switch");
       sw.type = "checkbox";
       sw.checked = m.status !== "disabled";
-      sw.title = sw.checked ? "Désactiver" : "Activer";
-      sw.setAttribute("aria-label", `${sw.title} ${m.name}`);
+      sw.title = sw.checked ? t("Disable") : t("Enable");
+      sw.setAttribute("aria-label", sw.checked ? t("Disable {name}", { name: m.name }) : t("Enable {name}", { name: m.name }));
       sw.addEventListener("change", async () => {
         await d.guard(d.api.mcpToggle(sid, m.name, sw.checked));
         void refreshMcp();
@@ -397,7 +399,7 @@ export function initPanel(d: Deps) {
     return li;
   }
 
-  // ------------------------------------------------------------ redimensionnement
+  // ------------------------------------------------------------ resizing
 
   const handle = $("panel-resize");
   handle.addEventListener("pointerdown", (e) => {
@@ -417,7 +419,7 @@ export function initPanel(d: Deps) {
     handle.addEventListener("pointerup", up);
   });
 
-  // Seule commande du panneau : ces boutons de la barre (recliquer sur l'actif le ferme).
+  // The panel's only controls: these bar buttons (clicking the active one again closes it).
   $("toggle-browser").addEventListener("click", () => toggle("browser"));
   $("toggle-servers").addEventListener("click", () => toggle("servers"));
   $("toggle-diff").addEventListener("click", () => toggle("diff"));
@@ -453,7 +455,7 @@ export function initPanel(d: Deps) {
       artifactTab.ready();
     } else if (ev.kind === "simulator") {
       simTab.onEvent(ev);
-      // Claude commence à agir : on montre l'écran, sans quitter un autre onglet ouvert.
+      // Claude starts acting: show the screen, without leaving another open tab.
       if (ev.state === "agent" && (!open || tab === "simulator")) {
         open = true;
         tab = "simulator";
@@ -466,7 +468,7 @@ export function initPanel(d: Deps) {
 
   render();
   return {
-    /** Le processus d'une conversation vient de démarrer : ses serveurs MCP sont connus. */
+    /** A conversation's process just started: its MCP servers are known. */
     sessionStarted() {
       if (open && tab === "servers") void refreshMcp();
     },
@@ -474,7 +476,7 @@ export function initPanel(d: Deps) {
     onEvent,
     openUrl,
     syncBrowser,
-    /** Une page vient d'être publiée : on la montre, sans quitter un autre onglet ouvert sauf demande explicite. */
+    /** A page was just published: show it, without leaving another open tab unless explicitly asked. */
     showArtifact(url: string, force = false) {
       artifactTab.select(url);
       renderArtifactToggle();
@@ -489,14 +491,14 @@ export function initPanel(d: Deps) {
       artifactTab.refresh();
       renderArtifactToggle();
     },
-    /** Le projet ou la conversation affichés ont changé. */
+    /** The displayed project or conversation changed. */
     contextChanged() {
       artifactTab.refresh();
       renderArtifactToggle();
       const cwd = d.cwd();
       const moved = cwd !== shownCwd;
       shownCwd = cwd;
-      // Autre projet : la liste change en fondu, sans à-coup.
+      // Another project: the list crossfades, without a jolt.
       const settle = () => {
         const list = $(`tab-${tab}`).querySelector<HTMLElement>(".panel-scroll");
         if (moved && list) void enter(list, { opacity: "0" }, { duration: DUR.fast });
@@ -504,7 +506,7 @@ export function initPanel(d: Deps) {
       if (open && tab === "servers") void refreshServers().then(settle);
       if (open && tab === "diff") void diffTab.refresh().then(settle);
     },
-    /** Un outil vient de tourner, ou la fenêtre revient au premier plan : les fichiers ont pu changer. */
+    /** A tool just ran, or the window came back to the front: files may have changed. */
     filesChanged() {
       if (!open || tab !== "diff") return;
       window.clearTimeout(filesTimer);

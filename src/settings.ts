@@ -1,4 +1,4 @@
-// Réglages : panneau à sections, enregistrement automatique à chaque changement.
+// Settings: a panel with sections, saved automatically on every change.
 import type { Api, Settings, UpdateState } from "./api";
 import { icon } from "./icons";
 import { DELETE_NOTE, EFFORTS, MODES, effortLabel, modeOf, modelChoices, prettyModel } from "./labels";
@@ -6,9 +6,10 @@ import { setWorldShown, worldShown } from "./world";
 import { confirmMenu, showMenu, type MenuEntry } from "./menu";
 import { animateOut, enter } from "./motion";
 import { el } from "./transcript";
+import { LANGUAGES, fmtMb, setLang, t, tp } from "./i18n";
 
 type Section = "general" | "perf" | "mcp" | "archives" | "about";
-const TITLES: Record<Section, string> = { general: "Général", perf: "Performance", mcp: "Serveurs MCP", archives: "Archives", about: "À propos" };
+const TITLES: Record<Section, string> = { general: t("General"), perf: t("Performance"), mcp: t("MCP servers"), archives: t("Archives"), about: t("About") };
 
 interface Deps {
   api: Api;
@@ -20,7 +21,6 @@ interface Deps {
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const fmtMb = (mb: number) => (mb >= 1024 ? `${(mb / 1024).toFixed(1).replace(".", ",")} Go` : `${Math.round(mb)} Mo`);
 
 export function initSettings(d: Deps) {
   const dlg = $("dlg-settings") as HTMLDialogElement;
@@ -28,13 +28,19 @@ export function initSettings(d: Deps) {
   let section: Section = "general";
   let saveTimer = 0;
   let savedTimer = 0;
+  /** Runs once the pending save has succeeded (the language reloads the window only then). */
+  let afterSave: (() => void) | null = null;
 
-  function save(patch: Partial<Settings>) {
+  function save(patch: Partial<Settings>, then?: () => void) {
     s = { ...s, ...patch };
+    if (then) afterSave = then;
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(async () => {
       if ((await d.guard(d.api.saveSettings(s).then(() => true))) === true) {
         d.onSaved(s);
+        const done = afterSave;
+        afterSave = null;
+        done?.();
         const tag = $("s-saved");
         tag.hidden = false;
         window.clearTimeout(savedTimer);
@@ -43,7 +49,7 @@ export function initSettings(d: Deps) {
     }, 250);
   }
 
-  // ------------------------------------------------------------ briques
+  // ------------------------------------------------------------ building blocks
 
   const group = (title: string | null, ...rows: HTMLElement[]) => {
     const g = el("section", "s-group");
@@ -97,41 +103,56 @@ export function initSettings(d: Deps) {
   // ------------------------------------------------------------ sections
 
   async function renderGeneral(body: HTMLElement) {
+    const language = s.language || "en";
     const path = el("input", "s-input");
-    path.placeholder = "Automatique";
+    path.placeholder = t("Automatic");
     path.value = s.claudePath ?? "";
     path.spellcheck = false;
     path.addEventListener("change", () => save({ claudePath: path.value.trim() || null }));
     const info = await d.guard(d.api.appInfo());
-    const found = info?.claudePath ? d.home(info.claudePath) : "Introuvable : indique son chemin.";
+    const found = info?.claudePath ? d.home(info.claudePath) : t("Not found: enter its path.");
     body.append(
       group(
-        "Claude",
-        row("Binaire claude", found, path),
-        row("Réponse en direct", "Afficher le texte et le Markdown pendant l'écriture.", toggle(s.partialMessages, (v) => save({ partialMessages: v }))),
-        row("Monde des agents", "Voir Claude et ses sous-agents travailler au-dessus du champ de saisie.", toggle(worldShown(), setWorldShown)),
-        row("Workflow et /loop", "Environ 5 000 tokens de plus par requête. S'applique au prochain lancement de claude.", toggle(s.allTools, (v) => save({ allTools: v }))),
+        null,
+        row(
+          t("Language"),
+          t("Reloads the window."),
+          picker(LANGUAGES.find((l) => l.id === language)?.label ?? language, () =>
+            LANGUAGES.map((l) => ({
+              label: l.label,
+              checked: language === l.id,
+              run: () => (save({ language: l.id }, () => setLang(l.id) && window.location.reload()), rerender()),
+            })),
+          ),
+        ),
       ),
       group(
-        "Nouvelles conversations",
+        "Claude",
+        row(t("claude binary"), found, path),
+        row(t("Live response"), t("Show text and Markdown as they're written."), toggle(s.partialMessages, (v) => save({ partialMessages: v }))),
+        row(t("Agent world"), t("Watch Claude and its subagents work above the input field."), toggle(worldShown(), setWorldShown)),
+        row(t("Workflow and /loop"), t("About 5,000 more tokens per request. Applies the next time claude starts."), toggle(s.allTools, (v) => save({ allTools: v }))),
+      ),
+      group(
+        t("New conversations"),
         row(
-          "Modèle",
+          t("Model"),
           null,
-          picker(s.defaultModel ? prettyModel(s.defaultModel) : "Par défaut", () => [
-            { label: "Par défaut", checked: !s.defaultModel, run: () => (save({ defaultModel: null }), rerender()) },
+          picker(s.defaultModel ? prettyModel(s.defaultModel) : t("Default"), () => [
+            { label: t("Default"), checked: !s.defaultModel, run: () => (save({ defaultModel: null }), rerender()) },
             ...modelChoices().map((m) => ({ label: m.displayName, checked: s.defaultModel === m.value, run: () => (save({ defaultModel: m.value }), rerender()) })),
           ]),
         ),
         row(
-          "Effort",
-          "Plus d'effort : réponses plus réfléchies, mais plus lentes.",
-          picker(effortLabel(s.defaultEffort) || "Par défaut", () => [
-            { label: "Par défaut", checked: !s.defaultEffort, run: () => (save({ defaultEffort: null }), rerender()) },
+          t("Effort"),
+          t("More effort: more thoughtful answers, but slower."),
+          picker(effortLabel(s.defaultEffort) || t("Default"), () => [
+            { label: t("Default"), checked: !s.defaultEffort, run: () => (save({ defaultEffort: null }), rerender()) },
             ...EFFORTS.map((e) => ({ label: e.label, checked: s.defaultEffort === e.id, run: () => (save({ defaultEffort: e.id }), rerender()) })),
           ]),
         ),
         row(
-          "Permissions",
+          t("Permissions"),
           null,
           picker(modeOf(s.defaultPermissionMode).label, () =>
             MODES.map((m) => ({ label: m.label, icon: m.icon, danger: m.id === "bypassPermissions", checked: s.defaultPermissionMode === m.id, run: () => (save({ defaultPermissionMode: m.id }), rerender()) })),
@@ -144,14 +165,14 @@ export function initSettings(d: Deps) {
   async function renderPerf(body: HTMLElement) {
     body.append(
       group(
-        "Processus claude",
-        row("En parallèle", "Au-delà, la conversation inactive la plus ancienne est suspendue.", stepper(s.maxLive, 1, 10, 1, String, (n) => save({ maxLive: n }))),
-        row("Suspension après inactivité", "Le processus s'arrête, la conversation reprend au message suivant.", stepper(s.idleMinutes, 0, 120, 5, (n) => (n ? `${n} min` : "Jamais"), (n) => save({ idleMinutes: n }))),
+        t("claude processes"),
+        row(t("In parallel"), t("Beyond this, the oldest idle conversation is suspended."), stepper(s.maxLive, 1, 10, 1, String, (n) => save({ maxLive: n }))),
+        row(t("Suspend when idle"), t("The process stops; the conversation resumes at the next message."), stepper(s.idleMinutes, 0, 120, 5, (n) => (n ? t("{n} min", { n }) : t("Never")), (n) => save({ idleMinutes: n }))),
       ),
     );
     const m = await d.api.metrics().catch(() => undefined);
     if (m) {
-      const cli = m.sessions.reduce((t, [, st]) => t + st.rssMb, 0);
+      const cli = m.sessions.reduce((sum, [, st]) => sum + st.rssMb, 0);
       const total = m.harness.rssMb + cli || 1;
       const bar = el("div", "usage-bar");
       const a = el("span");
@@ -162,8 +183,12 @@ export function initSettings(d: Deps) {
       const n = m.sessions.length;
       body.append(
         group(
-          "En ce moment",
-          row(`${fmtMb(m.harness.rssMb + cli)} utilisés`, `App ${fmtMb(m.harness.rssMb)}, ${n ? `${n} processus claude ${fmtMb(cli)}` : "aucun processus claude"}`, bar),
+          t("Right now"),
+          row(
+            t("{size} used", { size: fmtMb(m.harness.rssMb + cli) }),
+            t("App {app}, {procs}", { app: fmtMb(m.harness.rssMb), procs: n ? tp(n, "{n} claude process {size}", "{n} claude processes {size}", { size: fmtMb(cli) }) : t("no claude process") }),
+            bar,
+          ),
         ),
       );
     }
@@ -182,14 +207,14 @@ export function initSettings(d: Deps) {
       );
       return r;
     });
-    const listGroup = group("Serveurs à lancer", ...(rows.length ? rows : [row("Aucun serveur MCP configuré", "Ajoute-en avec claude mcp add.", el("span"))]));
+    const listGroup = group(t("Servers to start"), ...(rows.length ? rows : [row(t("No MCP servers configured"), t("Add one with claude mcp add."), el("span"))]));
     listGroup.hidden = s.mcpMode !== "selected";
     body.append(
       group(
         null,
         row(
-          "Ne lancer qu'une sélection",
-          "Chaque conversation ne démarre que les serveurs cochés. Les connecteurs claude.ai restent éteints.",
+          t("Start only a selection"),
+          t("Each conversation starts only the checked servers. claude.ai connectors stay off."),
           toggle(s.mcpMode === "selected", (v) => {
             save({ mcpMode: v ? "selected" : "all" });
             listGroup.hidden = !v;
@@ -197,14 +222,14 @@ export function initSettings(d: Deps) {
         ),
       ),
       listGroup,
-      el("p", "s-note", "S'applique aux nouvelles conversations. Le panneau Serveurs gère ceux d'une conversation en cours."),
+      el("p", "s-note", t("Applies to new conversations. The Servers panel handles those of a running conversation.")),
     );
   }
 
   async function renderArchives(body: HTMLElement) {
     const list = (await d.guard(d.api.listArchived())) ?? [];
     if (!list.length) {
-      body.append(el("p", "s-note", "Aucune conversation archivée."));
+      body.append(el("p", "s-note", t("No archived conversations.")));
       return;
     }
     const changed = async (action: Promise<void>) => {
@@ -218,15 +243,15 @@ export function initSettings(d: Deps) {
       text.title = h.title;
       text.append(el("b", undefined, h.title), el("small", undefined, d.home(h.cwd)));
       const actions = el("div", "s-actions");
-      const restore = el("button", "btn btn-ghost", "Restaurer");
+      const restore = el("button", "btn btn-ghost", t("Restore"));
       restore.type = "button";
       restore.addEventListener("click", () => void changed(d.api.setArchived(h.cliId, false)));
       const del = el("button", "icon-btn");
       del.type = "button";
-      del.title = "Supprimer";
-      del.setAttribute("aria-label", `Supprimer ${h.title}`);
+      del.title = t("Delete");
+      del.setAttribute("aria-label", t("Delete {name}", { name: h.title }));
       del.innerHTML = icon("trash");
-      del.addEventListener("click", () => confirmMenu(del, "Supprimer cette conversation ?", DELETE_NOTE, "Supprimer", () => void changed(d.api.deleteConversation(h.cliId)), { align: "end" }));
+      del.addEventListener("click", () => confirmMenu(del, t("Delete this conversation?"), DELETE_NOTE, t("Delete"), () => void changed(d.api.deleteConversation(h.cliId)), { align: "end" }));
       actions.append(restore, del);
       r.append(text, actions);
       return r;
@@ -239,15 +264,15 @@ export function initSettings(d: Deps) {
     body.append(
       group(
         null,
-        await updateRow(`Version ${info?.version ?? "?"}`),
-        row("Claude Code", info?.claudeVersion?.replace(" (Claude Code)", "") ?? "Introuvable", el("span")),
-        row("Typographie et icônes", "Geist (OFL 1.1), Phosphor Icons (MIT)", el("span")),
-        row("Créatures du monde des agents", "Free Pets Pack par Frakassets (CC BY 4.0)", el("span")),
+        await updateRow(t("Version {version}", { version: info?.version ?? "?" })),
+        row("Claude Code", info?.claudeVersion?.replace(" (Claude Code)", "") ?? t("Not found"), el("span")),
+        row(t("Fonts and icons"), "Geist (OFL 1.1), Phosphor Icons (MIT)", el("span")),
+        row(t("Agent world creatures"), t("Free Pets Pack by Frakassets (CC BY 4.0)"), el("span")),
       ),
     );
   }
 
-  /** Version installée, avec la recherche de mise à jour (automatique toutes les 6 h). */
+  /** Installed version, with the update check (automatic every 6 h). */
   async function updateRow(version: string) {
     const btn = el("button", "btn btn-ghost");
     btn.type = "button";
@@ -258,10 +283,18 @@ export function initSettings(d: Deps) {
       current = u;
       btn.disabled = u.state === "checking" || u.state === "downloading";
       btn.className = u.state === "ready" ? "btn btn-primary" : "btn btn-ghost";
-      btn.textContent = { idle: "Rechercher", upToDate: "Rechercher", error: "Réessayer", checking: "Recherche…", downloading: "Téléchargement…", ready: "Redémarrer" }[u.state];
+      btn.textContent = { idle: t("Check"), upToDate: t("Check"), error: t("Retry"), checking: t("Checking…"), downloading: t("Downloading…"), ready: t("Restart") }[u.state];
       const note =
-        u.state === "upToDate" ? " · à jour" : u.state === "ready" ? ` · ${u.version} prête` : u.state === "downloading" ? ` · ${u.version} trouvée` : u.state === "error" ? " · vérification impossible" : "";
-      hint.textContent = version + note;
+        u.state === "upToDate"
+          ? t("up to date")
+          : u.state === "ready"
+            ? t("{version} ready", { version: u.version })
+            : u.state === "downloading"
+              ? t("{version} found", { version: u.version })
+              : u.state === "error"
+                ? t("couldn't check")
+                : "";
+      hint.textContent = note ? `${version} · ${note}` : version;
       hint.title = u.state === "error" ? u.message : "";
     };
     paintUpdate = paint;

@@ -1,8 +1,8 @@
-//! Mises à jour automatiques : l'app lit `latest.json` dans les releases GitHub de Kwickos/better-harness.
+//! Automatic updates: the app reads `latest.json` in the GitHub releases of Kwickos/better-harness.
 //!
-//! La nouvelle version se télécharge en arrière-plan (signature vérifiée par le plugin), puis
-//! s'installe quand on clique sur « Redémarrer », ou à la fermeture de l'app : le lancement
-//! suivant est à jour même sans clic.
+//! The new version downloads in the background (signature checked by the plugin), then
+//! installs on a click on "Restart", or when the app quits: the next launch is up to date
+//! even without a click.
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -11,10 +11,10 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-/// Premier contrôle peu après le lancement, pour ne pas ralentir le démarrage.
+/// First check shortly after launch, so startup is not slowed down.
 const FIRST_CHECK: Duration = Duration::from_secs(20);
 const EVERY: Duration = Duration::from_secs(6 * 3600);
-/// Un réseau qui ne répond plus ne doit pas bloquer les vérifications suivantes.
+/// A network that stops answering must not block the next checks.
 const TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Clone, Default, Serialize)]
@@ -32,9 +32,9 @@ pub enum UpdateState {
 #[derive(Default)]
 pub struct Updates {
     state: Mutex<UpdateState>,
-    /// Paquet téléchargé et vérifié, prêt à remplacer l'app.
+    /// Package downloaded and verified, ready to replace the app.
     pending: Mutex<Option<(Update, Vec<u8>)>>,
-    /// Une seule vérification à la fois (lancement automatique et bouton des Réglages).
+    /// One check at a time (automatic launch and the Settings button).
     running: tokio::sync::Mutex<()>,
 }
 
@@ -48,7 +48,7 @@ impl Updates {
         let _ = app.emit("update", state);
     }
 
-    /// Cherche une version plus récente et la télécharge. Renvoie l'état obtenu.
+    /// Looks for a newer version and downloads it. Returns the resulting state.
     pub async fn check(&self, app: &AppHandle) -> UpdateState {
         let Ok(_guard) = self.running.try_lock() else {
             return self.state();
@@ -80,7 +80,7 @@ impl Updates {
         Ok(UpdateState::Ready { version })
     }
 
-    /// Remplace l'app par la version téléchargée. `false` s'il n'y avait rien à installer.
+    /// Replaces the app with the downloaded version. `false` if there was nothing to install.
     pub fn install(&self) -> Result<bool, String> {
         let Some((update, bytes)) = self.pending.lock().unwrap().take() else {
             return Ok(false);
@@ -90,8 +90,8 @@ impl Updates {
     }
 }
 
-/// Contrôle au lancement puis toutes les 6 heures. Rien en développement (`tauri dev`) :
-/// il n'y a pas de bundle à remplacer.
+/// Checks at launch then every 6 hours. Nothing in development (`tauri dev`):
+/// there is no bundle to replace.
 pub async fn watch(app: AppHandle, updates: std::sync::Arc<Updates>) {
     if cfg!(debug_assertions) {
         return;
