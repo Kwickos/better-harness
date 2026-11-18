@@ -263,6 +263,7 @@ export const tauriApi = {
   scratchDir: () => invoke<string>("scratch_dir"),
   appReady: () => invoke<void>("app_ready"),
   listCommands: (cwd: string) => invoke<{ name: string; description?: string | null }[]>("list_commands", { cwd }),
+  cliModels: (cwd: string) => invoke<ModelInfo[]>("cli_models", { cwd }),
   mentionFiles: (cwd: string, query: string) => invoke<string[]>("mention_files", { cwd, query }),
   cliDefaults: (cwd: string | null) => invoke<CliDefaults>("cli_defaults", { cwd }),
   gitStatus: (cwd: string) => invoke<GitStatus>("git_status", { cwd }),
