@@ -389,9 +389,15 @@ const readPr = (pr, repo, cwd) => {
   }
 };
 /** Definition of a git alias, read with the variables the command sets (HOME, XDG_CONFIG_HOME…). */
+/** Variables of the command that change where git finds its config; nothing else reaches the lookup (no PATH, DYLD_*, GIT_EXEC_PATH…). */
+const CONFIG_LOOKUP_VARS = new Set(["HOME", "XDG_CONFIG_HOME"]);
 const gitAlias = (cwd, name, env = []) => {
   try {
-    const vars = Object.fromEntries(env.map((e) => e.split(/=(.*)/s).slice(0, 2)));
+    const vars = Object.fromEntries(
+      env
+        .map((e) => e.split(/=(.*)/s).slice(0, 2))
+        .filter(([k, v]) => CONFIG_LOOKUP_VARS.has(k) && /^\/[\w./ -]*$/.test(v ?? "")),
+    );
     return execFileSync("git", ["-C", cwd, "config", "--get", `alias.${name}`], { env: { ...process.env, ...vars }, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
   } catch {
     return null;
@@ -455,16 +461,21 @@ function analyzeWords(words, state, ctx, depth, inherited = [], appended = false
     if (c >= 0) reason = analyze(args[c + 1] ?? "", state.cwd, ctx, depth + 1);
   } else if (name === "eval") reason = analyze(args.join(" "), state.cwd, ctx, depth + 1);
   else if (name === "xargs") {
+    // Options that take a separate value (BSD and GNU); `--opt=value` and `-Ivalue` are one word.
     let j = 0;
-    while (j < args.length && args[j].startsWith("-")) j += /^-[IdELnPs]$/.test(args[j]) ? 2 : 1;
+    while (j < args.length && args[j].startsWith("-")) j += /^(-[IJLRSPadEnsel]|--(arg-file|delimiter|eof|replace|max-lines|max-args|max-procs|max-chars|process-slot-var))$/.test(args[j]) ? 2 : 1;
     reason = analyzeWords(args.slice(j), state, ctx, depth, [], true);
+    // An option missing from the list must not hide git/gh: also check from the first git/gh word.
+    const k = args.findIndex((x, i) => i >= j && ["git", "gh"].includes(x.split("/").pop()));
+    if (!reason && k > j) reason = analyzeWords(args.slice(k), state, ctx, depth, [], true);
   } else if (name === "find") {
     for (let e = 0; e < args.length && !reason; e++) {
       if (!["-exec", "-execdir", "-ok", "-okdir"].includes(args[e])) continue;
       let end = args.findIndex((x, j) => j > e && (x === ";" || x === "+"));
       if (end < 0) end = args.length;
       const run = args.slice(e + 1, end);
-      reason = analyzeWords(run.filter((x) => x !== "{}"), state, ctx, depth, [], run.includes("{}"));
+      // `{}` inside a word (`refs/heads/{}`) is replaced too: any of it means words the guard can't see.
+      reason = analyzeWords(run.filter((x) => x !== "{}"), state, ctx, depth, [], run.some((x) => x.includes("{}")));
       e = end;
     }
   }
