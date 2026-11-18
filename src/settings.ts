@@ -1,5 +1,5 @@
 // Settings: a panel with sections, saved automatically on every change.
-import type { Api, Settings, UpdateState } from "./api";
+import type { Api, CliUpdateState, Settings, UpdateState } from "./api";
 import { icon } from "./icons";
 import { deleteNote, efforts, modes, effortLabel, modeOf, modelChoices, prettyModel } from "./labels";
 import { setWorldShown, worldShown } from "./world";
@@ -132,6 +132,14 @@ export function initSettings(d: Deps) {
       group(
         "Claude",
         row(t("claude binary"), found, path),
+        row(
+          t("Update automatically"),
+          t("Runs claude update at launch, then every 6 hours."),
+          toggle(s.cliAutoUpdate, (v) => {
+            save({ cliAutoUpdate: v });
+            if (v) void d.api.cliUpdateCheck().catch(() => undefined);
+          }),
+        ),
         row(t("Live response"), t("Show text and Markdown as they're written."), toggle(s.partialMessages, (v) => save({ partialMessages: v }))),
         row(t("Agent world"), t("Watch Claude and its subagents work above the input field."), toggle(worldShown(), setWorldShown)),
         row(t("Workflow and /loop"), t("About 5,000 more tokens per request. Applies the next time claude starts."), toggle(s.allTools, (v) => save({ allTools: v }))),
@@ -268,7 +276,7 @@ export function initSettings(d: Deps) {
       group(
         null,
         await updateRow(t("Version {version}", { version: info?.version ?? "?" })),
-        row("Claude Code", info?.claudeVersion?.replace(" (Claude Code)", "") ?? t("Not found"), el("span")),
+        await cliRow(info?.claudeVersion?.replace(" (Claude Code)", "") ?? null),
         row(t("Fonts and icons"), "Geist (OFL 1.1), Phosphor Icons (MIT)", el("span")),
         row(t("Agent world creatures"), t("Free Pets Pack by Frakassets (CC BY 4.0)"), el("span")),
       ),
@@ -310,6 +318,38 @@ export function initSettings(d: Deps) {
   }
   let paintUpdate: ((u: UpdateState) => void) | null = null;
   void d.api.onUpdate((u) => paintUpdate?.(u));
+
+  /** Installed CLI version, with `claude update` (automatic every 6 h unless turned off). */
+  async function cliRow(installed: string | null) {
+    const btn = el("button", "btn btn-ghost");
+    btn.type = "button";
+    btn.hidden = !installed;
+    const r = row("Claude Code", installed ?? t("Not found"), btn);
+    const hint = r.querySelector("small")!;
+    let version = installed;
+    const paint = (u: CliUpdateState) => {
+      if (!version) return;
+      if (u.state === "upToDate" || u.state === "updated") version = u.version;
+      btn.disabled = u.state === "checking";
+      btn.textContent = { idle: t("Check"), upToDate: t("Check"), updated: t("Check"), error: t("Retry"), checking: t("Checking…") }[u.state];
+      const note =
+        u.state === "upToDate"
+          ? t("up to date")
+          : u.state === "updated"
+            ? t("updated from {version}", { version: u.from })
+            : u.state === "error"
+              ? t("couldn't update")
+              : "";
+      hint.textContent = note ? `${version} · ${note}` : version;
+      hint.title = u.state === "error" ? u.message : u.state === "updated" ? t("Running conversations switch over at their next start.") : "";
+    };
+    paintCli = paint;
+    paint((await d.api.cliUpdateStatus().catch(() => undefined)) ?? { state: "idle" });
+    btn.addEventListener("click", () => void d.guard(d.api.cliUpdateCheck()).then((u) => u && paint(u)));
+    return r;
+  }
+  let paintCli: ((u: CliUpdateState) => void) | null = null;
+  void d.api.onCliUpdate((u) => paintCli?.(u));
 
   async function rerender() {
     const body = $("s-body");

@@ -56,6 +56,8 @@ xattr -dr com.apple.quarantine "/Applications/Better Harness.app"
 
 The app checks for a new version 20 s after launch, then every 6 hours. It reads `latest.json` from the latest release of this repository. A new version downloads in the background and its signature is verified. Then an **Update** button appears at the bottom of the sidebar. If you don't click it, the update installs when the app quits. **Settings → About** also lets you check by hand.
 
+The `claude` CLI is kept up to date too: 40 s after launch, then every 6 hours, the app runs `claude update`, which updates it the way it was installed and on its update channel. Running conversations keep their version until their next start. **Settings → General → Update automatically** turns this off, and **Settings → About** runs it by hand.
+
 ### Publish a version
 
 Versions are published from this Mac, under the **Kwickos** GitHub account only, from an up-to-date `main`:

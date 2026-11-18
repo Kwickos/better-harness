@@ -1,5 +1,6 @@
 mod artifacts;
 mod browser;
+mod cli_updates;
 mod commands;
 mod events;
 mod files_tool;
@@ -46,6 +47,9 @@ pub fn run() {
                     let _ = window.show();
                 }
             });
+            let cli_updates = Arc::new(cli_updates::CliUpdates::new(hub.clone()));
+            tauri::async_runtime::spawn(cli_updates::watch(app.handle().clone(), cli_updates.clone()));
+            app.manage(cli_updates);
             app.manage(simulator::Simulator::new(hub.clone(), simulator_cache));
             app.manage(servers::Servers::new(hub.clone()));
             app.manage(browser::Browser::new(app.handle().clone(), hub.clone()));
@@ -124,6 +128,8 @@ pub fn run() {
             commands::update_status,
             commands::update_check,
             commands::update_install,
+            commands::cli_update_status,
+            commands::cli_update_check,
         ])
         .on_window_event(|window, event| {
             // With a child webview (browser), the main view follows the window size.
