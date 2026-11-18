@@ -27,6 +27,10 @@ trash = "5.2.3"
 base64 = "0.22"
 imagesize = "0.14"
 tauri-plugin-updater = "2"
+# Already built for the updater: the beta channel reads the release list from the GitHub API.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+semver = "1"
 
 [profile.release]
 codegen-units = 1

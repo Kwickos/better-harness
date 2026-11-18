@@ -51,7 +51,7 @@ npm run release -- 0.2.0 --dry-run
 Le script vérifie le compte Kwickos, les hooks et les protections GitHub. Il construit l'app sur une branche `release/v<version>`, puis ouvre la PR `release: v<version>`. Il attend la CI, merge en squash, tague ce commit de `main`, publie la release et y fait avancer `beta` (et `stable` pour une version stable). Si une étape échoue, la PR est fermée et rien n'est publié. Une fois la PR mergée, relancer la même commande reprend à la publication.
 
 - **Stable** `x.y.z` : la release devient « latest », et les apps installées se mettent à jour.
-- **Bêta** `x.y.z-beta.N` : la release est une pré-release, jamais proposée aux apps stables. On l'installe à la main depuis la page des releases. L'app revient ensuite seule sur la stable suivante.
+- **Bêta** `x.y.z-beta.N` : la release est une pré-release, proposée seulement aux apps sur le canal bêta (Réglages → À propos). Les apps stables ne la voient jamais.
 
 Les tags `v…` et les releases publiées ne se modifient ni ne se suppriment. Une erreur se corrige par une nouvelle version.
 

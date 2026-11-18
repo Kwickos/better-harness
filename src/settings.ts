@@ -270,12 +270,27 @@ export function initSettings(d: Deps) {
     body.append(group(null, ...rows));
   }
 
+  const channels = (): { id: Settings["updateChannel"]; label: string }[] => [
+    { id: "stable", label: t("Stable") },
+    { id: "beta", label: t("Beta") },
+  ];
+
   async function renderAbout(body: HTMLElement) {
     const info = await d.guard(d.api.appInfo());
+    const channel = s.updateChannel || "stable";
+    // Updates never go back: an installed beta waits for a higher stable version.
+    const channelHint = channel === "stable" && info?.version.includes("-") ? t("This beta stays until the next stable version.") : t("Beta receives new versions first.");
     body.append(
       group(
         null,
         await updateRow(t("Version {version}", { version: info?.version ?? "?" })),
+        row(
+          t("Update channel"),
+          channelHint,
+          picker(channels().find((c) => c.id === channel)?.label ?? channel, () =>
+            channels().map((c) => ({ label: c.label, checked: channel === c.id, run: () => (save({ updateChannel: c.id }), rerender()) })),
+          ),
+        ),
         await cliRow(info?.claudeVersion?.replace(" (Claude Code)", "") ?? null),
         row(t("Fonts and icons"), "Geist (OFL 1.1), Phosphor Icons (MIT)", el("span")),
         row(t("Agent world creatures"), t("Free Pets Pack by Frakassets (CC BY 4.0)"), el("span")),
