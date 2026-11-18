@@ -15,11 +15,13 @@ const GITHUB_ACTIONS = 15368;
 /** Jobs of .github/workflows/ (rules.yml, build.yml) that must succeed before a merge. */
 export const CHECKS = ["rules", "web", "rust"];
 
+// Auto-merge can only squash (the one method allowed) and waits for the required CHECKS. The squash
+// commit is the PR title alone, with no body, so it never carries a Co-authored-by.
 export const SETTINGS = {
   allow_squash_merge: true,
   allow_merge_commit: false,
   allow_rebase_merge: false,
-  allow_auto_merge: false,
+  allow_auto_merge: true,
   squash_merge_commit_title: "PR_TITLE",
   squash_merge_commit_message: "BLANK",
   delete_branch_on_merge: true,
@@ -197,7 +199,7 @@ function apply() {
   }
 
   api([`repos/${REPO}`, "-X", "PATCH"], SETTINGS);
-  console.log("repository settings: squash only, branches deleted after merge");
+  console.log("repository settings: squash only, auto-merge allowed, branches deleted after merge");
   execFileSync("gh", ["api", "-X", "PUT", `repos/${REPO}/immutable-releases`], { stdio: ["ignore", "ignore", "inherit"] });
   console.log("immutable releases");
   const find = githubRulesets();

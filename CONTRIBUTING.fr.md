@@ -24,7 +24,7 @@
 2. **Commits signés `Kwickos <126871467+Kwickos@users.noreply.github.com>`**, sans trailer `Co-authored-by`. C'est l'adresse noreply du compte, celle que GitHub utilise pour les merges en squash : avec une autre adresse, chaque merge ajoute un `Co-authored-by`.
 3. **Une PR vers `main`** dont le titre suit `<type>: <description>` (ou `<type>(zone): …`), 72 caractères au maximum, sans point final. Ce titre devient le commit de `main`.
 4. **La CI doit passer** : `rules` (branche, titre, auteurs, version), `web` (`npm run build`) et `rust` (`cargo check`).
-5. **Merge en squash.** La branche est supprimée sur GitHub après le merge.
+5. **Merge en squash**, à la main ou par l'auto-merge de GitHub (squash seul), qui attend que les contrôles exigés `rules`, `web` et `rust` passent. Le commit de `main` est le titre de la PR seul, sans corps, donc sans `Co-authored-by`. La branche est supprimée sur GitHub après le merge.
 
 La version ne change jamais dans une PR ordinaire : seul `npm run release` la monte.
 
@@ -59,10 +59,10 @@ Les tags `v…` et les releases publiées ne se modifient ni ne se suppriment. U
 
 | Couche | Ce qu'elle fait | Contournable ? |
 | --- | --- | --- |
-| GitHub (`scripts/protections.mjs`) | `main` : PR obligatoire, squash seul, CI `rules` `web` `rust`, historique linéaire, pas de force-push ni de suppression. Branches : seuls les noms autorisés se créent. `beta`, `stable` : vers l'avant seulement, jamais supprimées. Tags : seuls les `v…` se créent, aucun ne bouge ni ne disparaît. Releases immuables. | Non : aucune exception, même pour le propriétaire. |
+| GitHub (`scripts/protections.mjs`) | `main` : PR obligatoire, squash seul, CI `rules` `web` `rust`, auto-merge permis (en squash, une fois cette CI passée), historique linéaire, pas de force-push ni de suppression. Branches : seuls les noms autorisés se créent. `beta`, `stable` : vers l'avant seulement, jamais supprimées. Tags : seuls les `v…` se créent, aucun ne bouge ni ne disparaît. Releases immuables. | Non : aucune exception, même pour le propriétaire. |
 | CI (`.github/workflows/`) | Contrôles d'une PR, exigés par GitHub avant le merge. | Non. |
 | Hooks git (`.githooks/`) | Refusent localement : commit sur `main`, mauvaise identité, `Co-authored-by`, push vers `main`, mauvais nom de branche, tag hors release, `beta` ou `stable` déplacée ailleurs que vers l'avant sur un commit de release. | Avec `--no-verify`, mais GitHub refuse ensuite. |
-| Sessions Claude (`.claude/settings.json`) | Bloquent `--no-verify`, le débranchement des hooks (y compris via `sh -c`, `xargs`, alias), les push de `main`, `beta`, `stable` ou de tags, les merges hors squash, `--admin`, les releases à la main et les écritures de l'API dans les protections. Une PR qui touche aux règles se merge par l'utilisateur sur github.com, jamais par une session. | Non, pour une session Claude. |
+| Sessions Claude (`.claude/settings.json`) | Bloquent `--no-verify`, le débranchement des hooks (y compris via `sh -c`, `xargs`, alias), les push de `main`, `beta`, `stable` ou de tags, les merges hors squash, `--admin`, l'auto-merge depuis le shell (`gh pr merge --auto`, la mutation GraphQL), les releases à la main et les écritures de l'API dans les protections. Une session n'active l'auto-merge que par l'interrupteur d'auto-merge de l'app, quand l'utilisateur le demande. Une PR qui touche aux règles se merge par l'utilisateur sur github.com, jamais par une session ni par l'auto-merge. | Non, pour une session Claude. |
 
 Les hooks s'activent avec `npm install`, et à chaque démarrage d'une session Claude. À la main : `node scripts/rules.mjs install`.
 

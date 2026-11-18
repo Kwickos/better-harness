@@ -145,6 +145,7 @@ test("guard: workarounds refused", () => {
     "gh api graphql -f query='mutation { mergePullRequest(input:{}) { clientMutationId } }'",
     "gh workflow disable rules.yml",
     "gh pr merge 4 --squash --auto --match-head-commit abc123",
+    "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input:{}) { clientMutationId } }'",
     "gh pr merge 4 --squash",
     "gh pr merge 4 --squash --match-head-commit other",
     "git config alias.st status",
