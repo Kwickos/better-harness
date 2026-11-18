@@ -2,7 +2,7 @@ import type { Artifact, CliDefaults, ModelInfo, ToolResultEv } from "./api";
 import type { IconName } from "./icons";
 import { t } from "./i18n";
 
-export const DELETE_NOTE = t("It goes to the Trash and also disappears from Claude Code.");
+export const deleteNote = () => t("It goes to the Trash and also disappears from Claude Code.");
 
 export const SIM_TOOL = "mcp__ios-simulator__control";
 /** The tool the app serves to show files in the conversation (src-tauri/src/files_tool.rs). */
@@ -112,26 +112,27 @@ export function updateArtifacts(list: Artifact[], input: string, ev: Pick<ToolRe
   return url;
 }
 
-export const EFFORTS: { id: string; label: string }[] = [
+// Labels are built on each call: they follow the interface language when it changes.
+export const efforts = (): { id: string; label: string }[] => [
   { id: "low", label: t("Low") },
   { id: "medium", label: t("Medium") },
   { id: "high", label: t("High") },
   { id: "xhigh", label: t("Very high") },
   { id: "max", label: t("Max") },
 ];
-export const effortLabel = (id: string | null | undefined) => EFFORTS.find((e) => e.id === id)?.label ?? "";
+export const effortLabel = (id: string | null | undefined) => efforts().find((e) => e.id === id)?.label ?? "";
 
-export const MODES: { id: string; label: string; icon: IconName }[] = [
+export const modes = (): { id: string; label: string; icon: IconName }[] => [
   { id: "default", label: t("Ask"), icon: "hand" },
   { id: "acceptEdits", label: t("Accept edits"), icon: "pencil" },
   { id: "plan", label: t("Plan"), icon: "map" },
   { id: "auto", label: t("Auto"), icon: "magic" },
   { id: "bypassPermissions", label: t("Don't ask"), icon: "warning" },
 ];
-export const modeOf = (id: string) => MODES.find((m) => m.id === id) ?? MODES[0];
+export const modeOf = (id: string) => modes().find((m) => m.id === id) ?? modes()[0];
 
 /** Fallback list until the CLI has sent its own (reply to `initialize`). */
-const FALLBACK: ModelInfo[] = [
+const fallback = (): ModelInfo[] => [
   { value: "default", displayName: t("Default") },
   { value: "opus", displayName: "Opus" },
   { value: "sonnet", displayName: "Sonnet" },
@@ -148,7 +149,7 @@ export function models(): ModelInfo[] {
       cache = null;
     }
   }
-  return cache?.length ? cache : FALLBACK;
+  return cache?.length ? cache : fallback();
 }
 export function rememberModels(list: ModelInfo[]) {
   cache = list;
@@ -211,7 +212,7 @@ export function effortLevels(id: string | null | undefined): { id: string; label
   const m = wanted ? findModel(wanted) : models().find((x) => x.value === "default");
   if (m?.supportsEffort === false) return [];
   const allowed = m?.supportedEffortLevels;
-  return allowed?.length ? EFFORTS.filter((e) => allowed.includes(e.id)) : EFFORTS;
+  return allowed?.length ? efforts().filter((e) => allowed.includes(e.id)) : efforts();
 }
 
 /** The effort actually applied: the choice made here, otherwise the one from the CLI settings. */

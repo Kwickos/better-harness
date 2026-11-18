@@ -4,7 +4,7 @@
 // so the thread doesn't jump.
 import type { Api, Attachment } from "./api";
 import { copyButton } from "./copy";
-import { fmtNumber, t, tp } from "./i18n";
+import { bindAttrs, fmtNumber, t, tp } from "./i18n";
 import { icon, type IconName } from "./icons";
 import { sentFiles } from "./labels";
 import { animateOut, DUR, enter } from "./motion";
@@ -35,11 +35,11 @@ function fileSize(bytes: number): string {
   return t(units[i], { n: fmtNumber(v, { maximumFractionDigits: 1 }) });
 }
 
+/** `label` is the English text (translated here), so the button follows language changes. */
 function iconButton(name: IconName, label: string, cls: string, run: () => void): HTMLButtonElement {
   const b = el("button", `icon-btn ${cls}`);
   b.type = "button";
-  b.title = label;
-  b.setAttribute("aria-label", label);
+  bindAttrs(b, label);
   b.innerHTML = icon(name, 16);
   b.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -109,7 +109,7 @@ export function initAttachments(d: Deps) {
     if (!a.exists) open.append(el("span", "att-note", t("not found")));
     open.addEventListener("click", () => void openFile(a.path));
     row.append(open);
-    if (a.exists) row.append(iconButton("folder", t("Show in Finder"), "att-reveal", () => d.reveal(a.path)));
+    if (a.exists) row.append(iconButton("folder", "Show in Finder", "att-reveal", () => d.reveal(a.path)));
     return row;
   }
 
@@ -151,7 +151,7 @@ export function initAttachments(d: Deps) {
 /** Full-screen viewer: one image at a time, ← → between the images of one send. */
 function createViewer(d: Deps, openFile: (path: string) => Promise<void>) {
   const dlg = el("dialog", "viewer");
-  dlg.setAttribute("aria-label", t("Preview"));
+  bindAttrs(dlg, "Preview", ["aria-label"]);
   dlg.tabIndex = -1;
   const bar = el("div", "viewer-bar");
   bar.dataset.tauriDragRegion = "";
@@ -165,18 +165,18 @@ function createViewer(d: Deps, openFile: (path: string) => Promise<void>) {
   const current = () => items[index];
   bar.append(
     title,
-    copyButton(() => current()?.path ?? "", t("Copy path"), "viewer-btn"),
-    iconButton("external", t("Open in its app"), "viewer-btn", () => void openFile(current().path)),
-    iconButton("folder", t("Show in Finder"), "viewer-btn", () => d.reveal(current().path)),
-    iconButton("close", t("Close"), "viewer-btn", close),
+    copyButton(() => current()?.path ?? "", "Copy path", "viewer-btn"),
+    iconButton("external", "Open in its app", "viewer-btn", () => void openFile(current().path)),
+    iconButton("folder", "Show in Finder", "viewer-btn", () => d.reveal(current().path)),
+    iconButton("close", "Close", "viewer-btn", close),
   );
   const stage = el("div", "viewer-stage");
   const img = el("img");
   img.draggable = false;
   img.decoding = "async";
   stage.append(img);
-  const prev = iconButton("chevronLeft", t("Previous image"), "viewer-nav is-prev", () => show(index - 1, true));
-  const next = iconButton("chevronRight", t("Next image"), "viewer-nav is-next", () => show(index + 1, true));
+  const prev = iconButton("chevronLeft", "Previous image", "viewer-nav is-prev", () => show(index - 1, true));
+  const next = iconButton("chevronRight", "Next image", "viewer-nav is-next", () => show(index + 1, true));
   dlg.append(bar, stage, prev, next);
   document.body.append(dlg);
 

@@ -17,8 +17,8 @@ export const LANGUAGES: { id: LangChoice; label: string }[] = [
 ];
 
 /**
- * Last choice, cached so the language is known before settings load: modules can build
- * strings at import time. Settings stay the source of truth; changing the language reloads the window.
+ * Last choice, cached so the language is known before settings load (no flash of the wrong language).
+ * Settings stay the source of truth.
  */
 const CACHE = "bh-language";
 const cached = () => {
@@ -45,7 +45,15 @@ export function resolveLang(choice: string | null | undefined): Lang {
 
 let current: Lang = resolveLang(cached());
 
-/** Applies the choice from settings. Returns true when it differs from the language already on screen. */
+const listeners = new Set<() => void>();
+
+/** Called after the language changes, to redraw what is on screen. */
+export function onLangChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+/** Applies the choice from settings, live: static HTML is retranslated and listeners redraw the rest. */
 export function setLang(choice: string | null | undefined): boolean {
   try {
     localStorage.setItem(CACHE, choice || "en");
@@ -56,6 +64,10 @@ export function setLang(choice: string | null | undefined): boolean {
   const changed = next !== current;
   current = next;
   document.documentElement.lang = current;
+  if (changed) {
+    translateDom();
+    for (const fn of listeners) fn();
+  }
   return changed;
 }
 
@@ -91,19 +103,33 @@ export function fmtMb(mb: number): string {
 }
 
 /**
+ * Translated attributes for an element built once and never redrawn (a button made at startup):
+ * the English key is kept on the element, so translateDom() switches it with the language.
+ */
+export function bindAttrs(node: Element, key: string, attrs: string[] = ["title", "aria-label"]) {
+  node.setAttribute("data-i18n-attr", attrs.join(","));
+  for (const attr of attrs) {
+    node.setAttribute(`data-i18n-${attr}`, key);
+    node.setAttribute(attr, t(key));
+  }
+}
+
+/**
  * Translates the static HTML: an element with `data-i18n` gets its text translated,
  * `data-i18n-attr="title,placeholder"` translates those attributes.
+ * The English text is kept the first time (`data-i18n-key`, `data-i18n-<attr>`), so it can switch again.
  */
 export function translateDom(root: ParentNode = document) {
-  if (current === "en") return;
   root.querySelectorAll<HTMLElement>("[data-i18n]").forEach((node) => {
-    const text = node.textContent?.trim();
-    if (text) node.textContent = t(text);
+    const key = (node.dataset.i18nKey ??= node.textContent?.trim() ?? "");
+    if (key) node.textContent = t(key);
   });
   root.querySelectorAll<HTMLElement>("[data-i18n-attr]").forEach((node) => {
-    for (const attr of node.dataset.i18nAttr!.split(",")) {
-      const value = node.getAttribute(attr.trim());
-      if (value) node.setAttribute(attr.trim(), t(value));
+    for (const attr of node.dataset.i18nAttr!.split(",").map((a) => a.trim())) {
+      const stored = `data-i18n-${attr}`;
+      if (!node.hasAttribute(stored)) node.setAttribute(stored, node.getAttribute(attr) ?? "");
+      const key = node.getAttribute(stored);
+      if (key) node.setAttribute(attr, t(key));
     }
   });
 }
