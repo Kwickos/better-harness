@@ -9,7 +9,11 @@
     "tauri": "tauri",
     "app": "tauri dev",
     "bundle": "tauri build",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "protections": "node scripts/protections.mjs apply",
+    "protections:verify": "node scripts/protections.mjs verify",
+    "test:rules": "node --test scripts/rules.test.mjs",
+    "prepare": "node scripts/rules.mjs install"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

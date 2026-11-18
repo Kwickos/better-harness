@@ -1,0 +1,3 @@
+#!/bin/sh
+# Repository rules (CONTRIBUTING.md). Turned on by npm install (core.hooksPath = .githooks).
+. "$(dirname "$0")/_rules"

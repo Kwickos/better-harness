@@ -1,0 +1,42 @@
+# Rules of a PR (branch, title, authors, version), required before any merge into main
+# by the "main" ruleset (scripts/protections.mjs). Runs again when the title changes.
+name: Rules
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rules-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # No code from the PR runs here: the rules applied are the ones on main
+      # (the PR's tests run in the web job).
+      # (First PR only: main does not have the file yet, so the PR's one is used.)
+      - name: Rules of main applied to the PR
+        run: |
+          if git cat-file -e "origin/$BASE_REF:scripts/rules.mjs" 2>/dev/null; then
+            git show "origin/$BASE_REF:scripts/rules.mjs" > "$RUNNER_TEMP/rules.mjs"
+          else
+            cp scripts/rules.mjs "$RUNNER_TEMP/rules.mjs"
+          fi
+          node "$RUNNER_TEMP/rules.mjs" ci
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
