@@ -10,7 +10,7 @@
    - Types : `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
    - `features/…` est le préfixe des sessions de l'app Claude : il est accepté tel quel.
    - `release/v…` est réservé à `npm run release`.
-2. **Commits signés `Kwickos <Kwickos@users.noreply.github.com>`**, sans trailer `Co-authored-by`.
+2. **Commits signés `Kwickos <126871467+Kwickos@users.noreply.github.com>`**, sans trailer `Co-authored-by`. C'est l'adresse noreply du compte, celle que GitHub utilise pour les merges en squash : avec une autre adresse, chaque merge ajoute un `Co-authored-by`.
 3. **Une PR vers `main`** dont le titre suit `<type>: <description>` (ou `<type>(zone): …`), 72 caractères au maximum, sans point final. Ce titre devient le commit de `main`.
 4. **La CI doit passer** : `rules` (branche, titre, auteurs, version), `web` (`npm run build`) et `rust` (`cargo check`).
 5. **Merge en squash.** La branche est supprimée sur GitHub après le merge.

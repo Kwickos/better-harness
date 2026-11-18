@@ -10,7 +10,7 @@ English · [Français](CONTRIBUTING.fr.md)
    - Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
    - `features/…` is the prefix of Claude app sessions: it is accepted as is.
    - `release/v…` is reserved for `npm run release`.
-2. **Commits signed `Kwickos <Kwickos@users.noreply.github.com>`**, with no `Co-authored-by` trailer.
+2. **Commits signed `Kwickos <126871467+Kwickos@users.noreply.github.com>`**, with no `Co-authored-by` trailer. It is the account's noreply address, the one GitHub uses for squash merges: with any other address, each merge adds a `Co-authored-by`.
 3. **A PR to `main`** whose title follows `<type>: <description>` (or `<type>(scope): …`), 72 characters at most, no trailing period. This title becomes the commit on `main`.
 4. **The CI must pass**: `rules` (branch, title, authors, version), `web` (`npm run build`) and `rust` (`cargo check`).
 5. **Squash merge.** The branch is deleted on GitHub after the merge.

@@ -16,7 +16,11 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const OWNER = "Kwickos";
-export const EMAIL = "Kwickos@users.noreply.github.com";
+/**
+ * Kwickos's GitHub noreply address with its account id: the only one GitHub accepts as the author of a
+ * squash merge. Local commits use it too, so merges don't add a Co-authored-by for a second address.
+ */
+export const EMAIL = "126871467+Kwickos@users.noreply.github.com";
 export const REPO = `${OWNER}/better-harness`;
 export const MAIN = "main";
 
@@ -213,7 +217,8 @@ function prePush(url, lines) {
       problems.push(`${ref}: only branches and version tags can be pushed.`);
     }
     if (deletion) continue;
-    const revs = remoteSha === ZERO ? [localSha, "--not", "--remotes=origin"] : [`${remoteSha}..${localSha}`];
+    // Only commits GitHub doesn't have yet: a branch updated with main must not re-check main's squash commits.
+    const revs = [localSha, "--not", "--remotes=origin", ...(remoteSha === ZERO ? [] : [remoteSha])];
     problems.push(...checkCommits(revs, { strict: true }));
   }
   return problems;
