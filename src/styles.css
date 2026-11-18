@@ -444,6 +444,17 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
   .perm-actions { justify-content: flex-end; }
 }
 
+/* Next step: the turn's recap, the question, and buttons that each send a full message. */
+.next { position: relative; margin-bottom: 8px; padding: 10px 12px 12px; border-radius: 12px; background: var(--fill); }
+.next-recap { margin: 0 24px 6px 0; color: var(--ink-2); font-size: 13px; line-height: 1.5; text-wrap: pretty; }
+.next-ask { margin: 0 24px 10px 0; font-weight: 500; line-height: 1.45; text-wrap: pretty; }
+.next-recap + .next-ask { margin-right: 0; }
+.next-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.next-actions .btn { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 12.5px; }
+.next-alt { background: var(--fill-2); color: var(--ink); }
+.next-alt:hover { background: color-mix(in srgb, var(--ink) 10%, var(--fill-2)); }
+.next-close { position: absolute; top: 6px; right: 6px; color: var(--ink-3); }
+
 #composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 10px 8px 8px 12px; border-radius: 16px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line-2), var(--box-shadow); } /* taste-skill-ignore: composer outline */
 #composer:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 26%, transparent), var(--box-shadow); } /* taste-skill-ignore */
 #input { display: block; width: 100%; min-height: 28px; max-height: 240px; margin: 0; padding: 0 4px 6px 2px; overflow-y: auto; border: 0; outline: 0; background: transparent; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; -webkit-user-select: text; user-select: text; }

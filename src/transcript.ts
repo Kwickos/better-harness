@@ -10,7 +10,7 @@ import { icon, type IconName } from "./icons";
 import { DUR, enter, leave } from "./motion";
 import { appendWithMentions } from "./mentions";
 import { LiveMarkdown, renderMarkdown } from "./markdown";
-import { artifactAction, FILES_TOOL, SIM_TOOL, simulatorAction, updateArtifacts } from "./labels";
+import { artifactAction, FILES_TOOL, NEXT_STEP_TOOL, SIM_TOOL, simulatorAction, updateArtifacts, type NextStep } from "./labels";
 
 const MAX_ITEMS = 600;
 
@@ -45,6 +45,8 @@ export class SessionView {
   status: string | null = null;
   init?: InitEv;
   rateLimit?: RateLimitEv;
+  /** Box of the last turn (`next_step`), until a message is sent. */
+  nextStep: NextStep | null = null;
   historyLoaded = false;
   hasMore = false;
   historyLimit = 300;
@@ -220,6 +222,7 @@ export class TranscriptRenderer {
   private toolGroup = new Map<string, Group>();
   private group?: Group;
   private stick = true;
+  private lastTop = 0;
   private scrollQueued = false;
   private live?: LiveMarkdown;
 
@@ -235,10 +238,16 @@ export class TranscriptRenderer {
     scroller.addEventListener(
       "scroll",
       () => {
-        this.stick = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+        // Only the reader scrolling up leaves the end. A scroll to the bottom reports itself a frame
+        // later, when streamed text may have grown the thread: that one must not let go of the end.
+        if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80) this.stick = true;
+        else if (scroller.scrollTop < this.lastTop) this.stick = false;
+        this.lastTop = scroller.scrollTop;
       },
       { passive: true },
     );
+    // Something above the input field grows (next-step box, request): a thread read at its end stays there.
+    new ResizeObserver(() => this.scrollToBottom()).observe(scroller);
   }
 
   get mounted() {
@@ -264,6 +273,7 @@ export class TranscriptRenderer {
     this.setStream(view && !view.stream.thinking ? view.stream.text : "", true);
     this.stick = true;
     this.placeAtEnd();
+    this.lastTop = this.scroller.scrollTop;
     this.scrollToBottom();
     if (crossfade && view) void enter(this.itemsEl, { opacity: "0" });
   }
@@ -480,6 +490,8 @@ export class TranscriptRenderer {
       decorateCode(d);
       return d;
     }
+    // The next-step box is drawn above the input field, not in the thread.
+    if (b.t === "tool" && b.name === NEXT_STEP_TOOL) return null;
     // Shown files: they take their place in the thread, outside the activity line.
     if (b.t === "tool" && b.name === FILES_TOOL) {
       this.group = undefined;

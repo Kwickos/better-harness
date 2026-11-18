@@ -141,6 +141,7 @@ export function initSettings(d: Deps) {
           }),
         ),
         row(t("Live response"), t("Show text and Markdown as they're written."), toggle(s.partialMessages, (v) => save({ partialMessages: v }))),
+        row(t("Next step"), t("When Claude needs your decision, it sums up the turn and offers buttons to answer. Applies the next time claude starts."), toggle(s.nextStep, (v) => save({ nextStep: v }))),
         row(t("Agent world"), t("Watch Claude and its subagents work above the input field."), toggle(worldShown(), setWorldShown)),
         row(t("Workflow and /loop"), t("About 5,000 more tokens per request. Applies the next time claude starts."), toggle(s.allTools, (v) => save({ allTools: v }))),
       ),
