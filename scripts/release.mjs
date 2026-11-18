@@ -17,7 +17,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync,
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { verifier as verifierProtections } from "./protections.mjs";
-import { EMAIL, FICHIERS_VERSION, MAIN, OWNER, REPO, VERSION, comparer, dossierHooks, versionUnique } from "./regles.mjs";
+import { EMAIL, FICHIERS_VERSION, MAIN, OWNER, REPO, VERSION, comparer, depotOfficiel, dossierHooks, versionUnique } from "./regles.mjs";
 
 const KEY = join(homedir(), ".tauri", "better-harness.key");
 const KEYCHAIN = ["-a", "better-harness", "-s", "better-harness updater key"];
@@ -49,7 +49,7 @@ const login = run("gh", ["api", "user", "--jq", ".login"]);
 if (login !== OWNER) fail(`gh est connecté en « ${login} », pas en ${OWNER} (gh auth switch -u ${OWNER}).`);
 if (run("git", ["config", "user.name"]) !== OWNER || run("git", ["config", "user.email"]) !== EMAIL) fail(`git doit signer les commits ${OWNER} <${EMAIL}>.`);
 const remote = run("git", ["remote", "get-url", "origin"]);
-if (!new RegExp(`github\\.com[:/]${REPO}(\\.git)?$`).test(remote)) fail(`le remote origin (${remote}) n'est pas ${REPO}.`);
+if (!depotOfficiel(remote)) fail(`le remote origin (${remote}) n'est pas ${REPO}.`);
 if (!dossierHooks()) fail("les hooks git ne sont pas actifs : lance node scripts/regles.mjs installer.");
 if (run("git", ["branch", "--show-current"]) !== MAIN) fail(`publie depuis la branche ${MAIN}.`);
 if (run("git", ["status", "--porcelain"])) fail("des modifications ne sont pas commitées.");

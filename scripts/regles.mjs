@@ -11,7 +11,7 @@
 //   node scripts/regles.mjs installer            active les hooks git (npm install le fait)
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +36,11 @@ const CO_AUTEUR = /^co-authored-by:/im;
 const EMAIL_GITHUB = new RegExp(`^(\\d+\\+)?${OWNER}@users\\.noreply\\.github\\.com$`, "i");
 const COMMITTER_GITHUB = "GitHub <noreply@github.com>";
 const ZERO = "0".repeat(40);
+
+/** Remote officiel : https (éventuellement avec l'utilisateur) ou ssh, sur github.com exactement. */
+export function depotOfficiel(url) {
+  return new RegExp(`^(https://([^@/]+@)?github\\.com/|git@github\\.com:|ssh://git@github\\.com/)${REPO}(\\.git)?/?$`).test(url ?? "");
+}
 
 export const FICHIERS_VERSION = ["package.json", "package-lock.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src-tauri/tauri.conf.json"];
 
@@ -132,13 +137,15 @@ export function verifierCommits(revs, { strict }) {
 
 const brancheCourante = () => git("branch", "--show-current");
 
-/** Dossier des hooks actif (absolu), ou null s'ils ne sont pas branchés. */
+/** Dossier des hooks actif : le .githooks de ce checkout avec ses trois hooks exécutables, sinon null. */
 export function dossierHooks(cwd = ".") {
   try {
-    const chemin = execFileSync("git", ["-C", cwd, "config", "--get", "core.hooksPath"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    const top = execFileSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    const absolu = resolve(top, chemin);
-    return ["pre-commit", "commit-msg", "pre-push"].every((h) => existsSync(join(absolu, h))) ? absolu : null;
+    const lire = (...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const top = lire("rev-parse", "--show-toplevel");
+    const dossier = join(top, ".githooks");
+    if (resolve(top, lire("config", "--get", "core.hooksPath")) !== dossier) return null;
+    for (const h of ["pre-commit", "commit-msg", "pre-push"]) accessSync(join(dossier, h), constants.X_OK);
+    return dossier;
   } catch {
     return null;
   }
@@ -161,7 +168,7 @@ function commitMsg(fichier) {
 }
 
 function prePush(url, lignes) {
-  if (!new RegExp(`github\\.com[:/]${REPO}(\\.git)?/?$`).test(url ?? "")) return [`${url} n'est pas ${REPO}.`];
+  if (!depotOfficiel(url)) return [`${url} n'est pas ${REPO}.`];
   try {
     const login = execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     if (login && login !== OWNER) return [`gh est connecté en « ${login} » (gh auth switch -u ${OWNER}).`];

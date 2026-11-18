@@ -102,6 +102,14 @@ function contenu(attendu, reel) {
   return attendu === reel;
 }
 
+/** Rulesets de GitHub en détail. Un ruleset se retrouve par son nom, ou par sa cible s'il a été renommé. */
+function rulesetsGithub() {
+  const details = api([`repos/${REPO}/rulesets`, "--paginate"]).map((r) => api([`repos/${REPO}/rulesets/${r.id}`]));
+  return (attendu) =>
+    details.find((r) => r.name === attendu.name) ??
+    details.find((r) => r.target === attendu.target && contenu(attendu.conditions, r.conditions) && !RULESETS.some((a) => a.name === r.name));
+}
+
 /** Écarts entre GitHub et ce fichier (vide si tout est en place). */
 export function verifier() {
   const ecarts = [];
@@ -109,14 +117,14 @@ export function verifier() {
   for (const [cle, valeur] of Object.entries(REGLAGES)) if (repo[cle] !== valeur) ecarts.push(`réglage ${cle} = ${repo[cle]} (attendu ${valeur})`);
   if (repo.default_branch !== MAIN) ecarts.push(`branche par défaut ${repo.default_branch} (attendu ${MAIN})`);
   if (!api([`repos/${REPO}/immutable-releases`]).enabled) ecarts.push("releases immuables désactivées");
-  const existants = api([`repos/${REPO}/rulesets`, "--paginate"]);
+  const trouver = rulesetsGithub();
   for (const attendu of RULESETS) {
-    const resume = existants.find((r) => r.name === attendu.name);
-    if (!resume) {
+    const reel = trouver(attendu);
+    if (!reel) {
       ecarts.push(`ruleset « ${attendu.name} » absent`);
       continue;
     }
-    const reel = api([`repos/${REPO}/rulesets/${resume.id}`]);
+    if (reel.name !== attendu.name) ecarts.push(`ruleset « ${reel.name} » à renommer en « ${attendu.name} »`);
     if (reel.enforcement !== "active") ecarts.push(`ruleset « ${attendu.name} » : ${reel.enforcement} (attendu active)`);
     if (reel.bypass_actors?.length) ecarts.push(`ruleset « ${attendu.name} » : ${reel.bypass_actors.length} exception(s) de contournement`);
     if (reel.target !== attendu.target || !contenu(attendu.conditions, reel.conditions)) ecarts.push(`ruleset « ${attendu.name} » : cible modifiée`);
@@ -154,9 +162,9 @@ function appliquer() {
   console.log("réglages du dépôt : squash uniquement, branches supprimées après merge");
   execFileSync("gh", ["api", "-X", "PUT", `repos/${REPO}/immutable-releases`], { stdio: ["ignore", "ignore", "inherit"] });
   console.log("releases immuables");
-  const existants = api([`repos/${REPO}/rulesets`, "--paginate"]);
+  const trouver = rulesetsGithub();
   for (const ruleset of RULESETS) {
-    const id = existants.find((r) => r.name === ruleset.name)?.id;
+    const id = trouver(ruleset)?.id;
     api(id ? [`repos/${REPO}/rulesets/${id}`, "-X", "PUT"] : [`repos/${REPO}/rulesets`, "-X", "POST"], ruleset);
     console.log(`ruleset « ${ruleset.name} » ${id ? "mis à jour" : "créé"}`);
   }

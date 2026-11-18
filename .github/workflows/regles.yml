@@ -25,7 +25,16 @@ jobs:
         with:
           node-version: 24
       - run: node --test scripts/regles.test.mjs
-      - run: node scripts/regles.mjs ci
+      # Les règles appliquées sont celles de main : une PR ne peut pas assouplir le contrôle qui la juge.
+      # (Première PR seulement : main n'a pas encore le fichier, on prend celui de la PR.)
+      - name: Règles de main appliquées à la PR
+        run: |
+          if git cat-file -e "origin/$BASE_REF:scripts/regles.mjs" 2>/dev/null; then
+            git show "origin/$BASE_REF:scripts/regles.mjs" > "$RUNNER_TEMP/regles.mjs"
+          else
+            cp scripts/regles.mjs "$RUNNER_TEMP/regles.mjs"
+          fi
+          node "$RUNNER_TEMP/regles.mjs" ci
         env:
           HEAD_REF: ${{ github.head_ref }}
           BASE_REF: ${{ github.base_ref }}

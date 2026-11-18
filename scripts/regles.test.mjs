@@ -41,11 +41,35 @@ test("découpage des commandes shell", () => {
 });
 
 // État simulé : hooks actifs, sur une branche de travail.
-const ctx = { hooks: () => true, branche: () => "feat/x" };
+const ctx = { hooks: () => true, branche: () => "feat/x", fichiersPr: () => ["src/main.ts"] };
 
 test("garde-fou : contournements refusés", () => {
   for (const cmd of [
     "git commit --no-verify -m x",
+    "git commit --no-verif -m x",
+    "git push --no-ver origin feat/x",
+    "git push --mirr",
+    "git push --tag",
+    "git push --dele origin v0.1.0",
+    "git tag --del v0.1.0",
+    "git -c alias.ci='commit --no-verify' ci -m x",
+    "git config alias.ci '!git commit --no-verify'",
+    "bash -c 'git push origin main'",
+    "sh -lc \"git commit --no-verify -m x\"",
+    "eval git push origin main",
+    "echo v0.2.0 | xargs git tag",
+    "echo main | xargs -I{} git push origin {}",
+    "find . -name x -exec git push origin main \\;",
+    "timeout 30 git push origin main",
+    "{ git push origin main; }",
+    "if true; then git push origin main; fi",
+    "node -e \"require('child_process').execSync('git push origin main')\"",
+    "python3 -c 'import os; os.system(\"git commit --no-verify -m x\")'",
+    "echo '' > .githooks/pre-commit",
+    "printf x >>.githooks/pre-push",
+    "cp /dev/null .githooks/pre-push",
+    "sed -i '' 's/exit 1/exit 0/' .githooks/_regles",
+    "tee .claude/settings.json < /dev/null",
     "git commit -nm x",
     "git commit -anm x",
     "git -c core.hooksPath=/dev/null commit -m x",
@@ -92,7 +116,13 @@ test("garde-fou : contournements refusés", () => {
     "gh api -X PUT repos/Kwickos/better-harness/pulls/3/merge",
     "gh api graphql -f query='mutation { mergePullRequest(input:{}) { clientMutationId } }'",
     "gh workflow disable regles.yml",
+    "gh pr merge 4 --squash --auto",
   ]) {
+    const regles = { ...ctx, fichiersPr: () => ["scripts/regles.mjs", "src/main.ts"] };
+    if (cmd.includes("--auto")) {
+      assert.notEqual(analyser(cmd, "/depot", regles), null, cmd);
+      continue;
+    }
     assert.notEqual(analyser(cmd, "/depot", ctx), null, cmd);
   }
 });
@@ -125,6 +155,12 @@ test("garde-fou : travail normal autorisé", () => {
     "npm run protections:verifier",
     "ls .githooks",
     "cat .githooks/pre-push",
+    "sed -n 1,20p .githooks/pre-push",
+    "bash -c 'git status && git log -1'",
+    "node -e 'console.log(1)'",
+    "echo ok > /tmp/x",
+    "git config alias.st status",
+    "find . -name '*.mjs' -exec grep -l regles {} +",
   ]) {
     assert.equal(analyser(cmd, "/depot", ctx), null, cmd);
   }
@@ -139,4 +175,12 @@ test("garde-fou : état du dépôt", () => {
   assert.notEqual(analyser("git commit -m x", "/depot", sansHooks), null);
   assert.notEqual(analyser("git push -u origin feat/x", "/depot", sansHooks), null);
   assert.equal(analyser("git status", "/depot", sansHooks), null);
+});
+
+test("garde-fou : PR illisible ou qui touche aux règles", () => {
+  assert.notEqual(analyser("gh pr merge 2 --squash", "/depot", { ...ctx, fichiersPr: () => [".github/workflows/regles.yml"] }), null);
+  assert.notEqual(analyser("gh pr merge --squash", "/depot", { ...ctx, fichiersPr: () => null }), null);
+  let demande;
+  analyser("gh pr merge -s https://github.com/Kwickos/better-harness/pull/7 -t titre", "/depot", { ...ctx, fichiersPr: (pr) => ((demande = pr), []) });
+  assert.equal(demande, "https://github.com/Kwickos/better-harness/pull/7");
 });

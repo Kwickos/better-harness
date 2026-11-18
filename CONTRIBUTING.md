@@ -15,6 +15,10 @@
 
 La version ne change jamais dans une PR ordinaire : seul `npm run release` la monte.
 
+## Issues
+
+Une issue part d'un des trois modèles : **Bug**, **Enhancement** (nouvelle fonction ou amélioration) ou **Documentation**. Chaque modèle pose son label (`bug`, `enhancement`, `documentation`). Les issues vierges sont désactivées. Une PR qui règle une issue l'indique dans sa description (`Closes #12`).
+
 ## Publier
 
 Depuis `main` à jour, sur ce Mac :
@@ -45,7 +49,7 @@ Les tags `v…` et les releases publiées ne se modifient ni ne se suppriment. U
 | GitHub (`scripts/protections.mjs`) | `main` : PR obligatoire, squash seul, CI `regles` `web` `rust`, historique linéaire, pas de force-push ni de suppression. Branches : seuls les noms autorisés se créent. Tags : seuls les `v…` se créent, aucun ne bouge ni ne disparaît. Releases immuables. | Non : aucune exception, même pour le propriétaire. |
 | CI (`.github/workflows/`) | Contrôles d'une PR, exigés par GitHub avant le merge. | Non. |
 | Hooks git (`.githooks/`) | Refusent localement : commit sur `main`, mauvaise identité, `Co-authored-by`, push vers `main`, mauvais nom de branche, tag hors release. | Avec `--no-verify`, mais GitHub refuse ensuite. |
-| Sessions Claude (`.claude/settings.json`) | Bloquent `--no-verify`, le débranchement des hooks, les push de `main` ou de tags, les merges hors squash, `--admin`, les releases à la main et les écritures de l'API dans les protections. | Non, pour une session Claude. |
+| Sessions Claude (`.claude/settings.json`) | Bloquent `--no-verify`, le débranchement des hooks (y compris via `sh -c`, `xargs`, alias), les push de `main` ou de tags, les merges hors squash, `--admin`, les releases à la main et les écritures de l'API dans les protections. Une PR qui touche aux règles se merge par l'utilisateur sur github.com, jamais par une session. | Non, pour une session Claude. |
 
 Les hooks s'activent avec `npm install`, et à chaque démarrage d'une session Claude. À la main : `node scripts/regles.mjs installer`.
 

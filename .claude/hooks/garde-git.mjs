@@ -41,7 +41,7 @@ export function commandes(ligne) {
     } else if (/\s/.test(c)) {
       if (c === "\n") finCommande();
       else finMot();
-    } else if (";&|()`{}".includes(c) || (c === "$" && ligne[i + 1] === "(")) {
+    } else if (";&|()`".includes(c) || (c === "$" && ligne[i + 1] === "(")) {
       finCommande();
       if (c === "$") i++;
     } else mot = (mot ?? "") + c;
@@ -50,7 +50,19 @@ export function commandes(ligne) {
   return sorties;
 }
 
-const ENVELOPPES = new Set(["rtk", "proxy", "command", "env", "sudo", "time", "nohup", "exec", "builtin"]);
+// Mots qui précèdent la vraie commande (préfixes et mots-clés du shell).
+const ENVELOPPES = new Set(["rtk", "proxy", "command", "env", "sudo", "time", "nohup", "exec", "builtin", "nice", "caffeinate", "{", "}", "!", "if", "then", "else", "elif", "do", "while", "until"]);
+const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish"]);
+const INTERPRETES = new Set(["node", "python", "python3", "ruby", "perl", "deno", "bun", "osascript", "php"]);
+/** Fichiers qui font respecter les règles : une PR qui les touche se merge par l'utilisateur, pas par une session. */
+export const FICHIERS_REGLES = /^(scripts\/(regles|protections|release)\.mjs|\.github\/|\.githooks\/|\.claude\/(hooks\/|settings\.json))/;
+const CHEMINS_HOOKS = /(^|\/)\.githooks(\/|$)|\.git\/hooks|\.claude\/hooks|\.claude\/settings/;
+
+/** `a` est-elle l'option `nom` ? git accepte les abréviations non ambiguës des options longues (--no-verif…). */
+const est = (a, ...noms) => {
+  const o = a.split("=")[0];
+  return noms.some((n) => o === n || (n.startsWith("--") && o.startsWith("--") && o.length > 3 && n.startsWith(o)));
+};
 const OPTIONS_GIT_A_VALEUR = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"]);
 
 const brancheDe = (cwd) => {
@@ -73,11 +85,12 @@ function analyserGit(args, cwd, env, ctx) {
     }
   }
   if (configs.some((c) => /hookspath/i.test(c))) return "les hooks git du dépôt ne se débranchent pas.";
+  if (configs.some((c) => /^alias\./i.test(c))) return "pas d'alias git à la volée : écris la commande en entier.";
   const [sous, ...reste] = args.slice(i);
   if (!sous) return null;
   const options = reste.filter((a) => a.startsWith("-"));
   const positionnels = reste.filter((a) => !a.startsWith("-"));
-  if (reste.includes("--no-verify")) return "--no-verify est interdit : corrige ce que le hook signale.";
+  if (reste.some((a) => est(a, "--no-verify"))) return "--no-verify est interdit : corrige ce que le hook signale.";
 
   if (sous === "config") {
     // git config [get|set|unset|…] <clé> [valeur], ou les anciennes options --unset, --add…
@@ -90,6 +103,7 @@ function analyserGit(args, cwd, env, ctx) {
       if (!installe) return "core.hooksPath reste sur .githooks.";
     }
     const valeur = pos[1];
+    if (modifie && cle?.startsWith("alias.") && /no-verify|hookspath|^!/i.test(pos.slice(1).join(" "))) return "cet alias git contournerait les hooks.";
     if (modifie && ((cle === "user.name" && valeur !== OWNER) || (cle === "user.email" && valeur !== EMAIL))) return `les commits de ce dépôt sont signés ${OWNER} <${EMAIL}>.`;
     return null;
   }
@@ -111,8 +125,8 @@ function analyserGit(args, cwd, env, ctx) {
   }
 
   if (sous === "push") {
-    if (options.some((o) => ["--mirror", "--all", "--branches", "--tags", "--follow-tags", "--prune"].includes(o))) return `git push ${options.join(" ")} : pousse une branche à la fois. ${RELEASE}.`;
-    const supprime = options.some((o) => o === "--delete" || o === "-d");
+    if (options.some((o) => est(o, "--mirror", "--all", "--branches", "--tags", "--follow-tags", "--prune"))) return `git push ${options.join(" ")} : pousse une branche à la fois. ${RELEASE}.`;
+    const supprime = options.some((o) => o === "-d" || est(o, "--delete"));
     const branche = ctx.branche(cwd);
     const refs = positionnels.slice(1);
     if (!refs.length && branche === MAIN) return `${MAIN} ne reçoit que des PR mergées en squash.`;
@@ -128,7 +142,7 @@ function analyserGit(args, cwd, env, ctx) {
 
   if (sous === "tag") {
     const lecture = ["-l", "--list", "-n", "--contains", "--no-contains", "--points-at", "--merged", "--no-merged", "-v", "--verify"];
-    const ecrit = options.some((o) => ["-d", "--delete", "-a", "--annotate", "-s", "--sign", "-f", "--force", "-m", "-F", "-u", "--local-user"].includes(o));
+    const ecrit = options.some((o) => ["-d", "-a", "-s", "-f", "-m", "-F", "-u", "-e"].includes(o) || est(o, "--delete", "--annotate", "--sign", "--force", "--local-user", "--message", "--file", "--edit"));
     if (ecrit || (positionnels.length && !options.some((o) => lecture.includes(o.split("=")[0]) || /^-n\d*$/.test(o) || o.startsWith("--sort") || o.startsWith("--format")))) return `${RELEASE}.`;
     return null;
   }
@@ -137,7 +151,7 @@ function analyserGit(args, cwd, env, ctx) {
   return null;
 }
 
-function analyserGh(args) {
+function analyserGh(args, cwd, ctx) {
   const [groupe, action, ...reste] = args;
   const a = [action, ...reste].filter(Boolean);
   const valeur = (...noms) => {
@@ -151,6 +165,15 @@ function analyserGh(args) {
     if (reste.includes("--admin")) return "gh pr merge --admin est interdit : aucune exception aux règles de main.";
     if (reste.some((o) => ["--merge", "-m", "--rebase", "-r"].includes(o))) return "main se merge en squash uniquement (gh pr merge --squash).";
     if (!reste.some((o) => o === "--squash" || o === "-s")) return "précise --squash : main se merge en squash uniquement.";
+    let pr;
+    for (let k = 0; k < reste.length; k++) {
+      if (/^(-t|--subject|-b|--body|-F|--body-file|-A|--author-email|--match-head-commit|-R|--repo)$/.test(reste[k])) k++;
+      else if (!reste[k].startsWith("-")) pr ??= reste[k];
+    }
+    const fichiers = ctx.fichiersPr(pr, cwd);
+    if (!fichiers) return "impossible de lire les fichiers de la PR (gh pr diff) : merge refusé par prudence.";
+    const regles = fichiers.filter((f) => FICHIERS_REGLES.test(f));
+    if (regles.length) return `cette PR change les règles du dépôt (${regles.join(", ")}) : c'est à l'utilisateur de la merger sur github.com.`;
     return null;
   }
   if (groupe === "pr" && (action === "create" || action === "edit")) {
@@ -188,14 +211,22 @@ function analyserGh(args) {
   return null;
 }
 
-const DESTRUCTEURS = new Set(["rm", "mv", "chmod", "chflags", "ln", "unlink", "truncate"]);
+const ECRIVAINS = new Set(["rm", "mv", "cp", "install", "chmod", "chflags", "ln", "unlink", "truncate", "tee", "touch", "dd", "rsync"]);
+
+const fichiersPr = (pr, cwd) => {
+  try {
+    return execFileSync("gh", ["pr", "diff", ...(pr ? [pr] : []), "--name-only"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split("\n").filter(Boolean);
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Raison du refus de la commande Bash, ou null si elle passe.
  * `ctx` remplace l'état réel du dépôt dans les tests (hooks actifs, branche courante).
  */
 export function analyser(ligne, cwd = process.cwd(), ctx = {}) {
-  ctx = { hooks: (dir) => !!dossierHooks(dir), branche: brancheDe, ...ctx };
+  ctx = { hooks: (dir) => !!dossierHooks(dir), branche: brancheDe, fichiersPr, ...ctx };
   for (const mots of commandes(ligne)) {
     const env = [];
     let k = 0;
@@ -208,8 +239,38 @@ export function analyser(ligne, cwd = process.cwd(), ctx = {}) {
     if (!cmd) continue;
     const nom = cmd.split("/").pop();
     if (nom === "cd" && args[0]) cwd = resolve(cwd, args[0].replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
-    if (DESTRUCTEURS.has(nom) && args.some((x) => /(^|\/)\.githooks(\/|$)|\.git\/hooks|\.claude\/hooks/.test(x))) return "les hooks du dépôt ne se suppriment pas : modifie-les dans une PR.";
-    const raison = nom === "git" ? analyserGit(args, cwd, env, ctx) : nom === "gh" ? analyserGh(args) : null;
+    // Écritures dans les hooks : commandes de fichiers, sed/perl -i, redirections > et >>.
+    const enPlace = (nom === "sed" || nom === "perl") && args.some((x) => /^-[a-zA-Z]*i/.test(x));
+    const redirige = mots.some((m, j) => /^\d?>>?\|?$/.test(m) ? CHEMINS_HOOKS.test(mots[j + 1] ?? "") : /^\d?>>?/.test(m) && CHEMINS_HOOKS.test(m.replace(/^\d?>>?\|?/, "")));
+    if (redirige || ((ECRIVAINS.has(nom) || enPlace) && args.some((x) => CHEMINS_HOOKS.test(x)))) return "les hooks du dépôt ne se modifient pas en shell : change-les dans une PR.";
+    // Commandes imbriquées : sh -c, eval, xargs, find -exec, timeout.
+    let imbriquee = null;
+    if (SHELLS.has(nom)) {
+      const c = args.findIndex((x) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(x));
+      if (c >= 0) imbriquee = args[c + 1] ?? "";
+    } else if (nom === "eval") imbriquee = args.join(" ");
+    else if (nom === "xargs") {
+      let j = 0;
+      while (j < args.length && args[j].startsWith("-")) j += /^-[IdELnPs]$/.test(args[j]) ? 2 : 1;
+      imbriquee = args.slice(j).join(" ");
+      // xargs ajoute des arguments qu'on ne voit pas : git/gh qui écrivent sont refusés.
+      if (/^(\S*\/)?(git|gh)\s/.test(imbriquee) && /\b(push|tag|commit|config|merge|release|api|update-ref)\b/.test(imbriquee)) return "xargs masque les arguments de git/gh : écris la commande en entier.";
+    } else if (nom === "timeout") imbriquee = args.slice(args.findIndex((x) => !x.startsWith("-")) + 1).join(" ");
+    else if (nom === "find") {
+      const e = args.findIndex((x) => x === "-exec" || x === "-execdir" || x === "-ok");
+      if (e >= 0) imbriquee = args.slice(e + 1).filter((x) => x !== ";" && x !== "+" && x !== "{}").join(" ");
+    }
+    if (imbriquee) {
+      const raison = analyser(imbriquee, cwd, ctx);
+      if (raison) return raison;
+    }
+    if (INTERPRETES.has(nom)) {
+      const code = args.filter((_, j) => j > 0 && /^(-e|-c|-p|--eval|--print)$/.test(args[j - 1])).join(" ");
+      if (/\b(git|gh)\b/.test(code) && /no-verify|hookspath|push|commit|merge|\btag\b|release|\bapi\b|ruleset/i.test(code)) {
+        return "git ou gh lancé depuis du code en ligne : lance la commande directement, pour qu'elle soit vérifiée.";
+      }
+    }
+    const raison = nom === "git" ? analyserGit(args, cwd, env, ctx) : nom === "gh" ? analyserGh(args, cwd, ctx) : null;
     if (raison) return raison;
   }
   return null;
@@ -220,7 +281,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     entree = JSON.parse(readFileSync(0, "utf8"));
   } catch {
-    process.exit(0);
+    // Une entrée illisible ne doit rien laisser passer.
+    console.error("Règle du dépôt : entrée du hook illisible, commande refusée par prudence.");
+    process.exit(2);
   }
   const commande = entree?.tool_input?.command;
   if (typeof commande !== "string") process.exit(0);
