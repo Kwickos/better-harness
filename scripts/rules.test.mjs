@@ -49,6 +49,10 @@ const ctx = { hooks: () => true, branch: () => "feat/x", alias: () => null, pr: 
 
 test("guard: workarounds refused", () => {
   for (const cmd of [
+    "find . -name x -exec git push origin refs/heads/{} \\;",
+    "echo main | xargs -o git push origin",
+    "echo main | xargs --max-args 1 git push origin",
+    "echo v1 | xargs -J % git tag %",
     "git commit --no-verify -m x",
     "git commit --no-verif -m x",
     "git push --no-ver origin feat/x",
