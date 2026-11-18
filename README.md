@@ -56,27 +56,26 @@ L'app cherche une nouvelle version 20 s après son lancement, puis toutes les 6 
 
 ### Publier une version
 
-Les versions sont publiées depuis ce Mac, sous le compte GitHub **Kwickos** uniquement :
+Les versions sont publiées depuis ce Mac, sous le compte GitHub **Kwickos** uniquement, à partir de `main` à jour :
 
 ```bash
 npm run release -- 0.2.0 "Ce qui change"
 ```
 
-Le script s'arrête si gh, git ou le remote ne sont pas Kwickos, ou si des modifications ne sont pas commitées. Il fait ensuite, dans l'ordre :
+Une bêta s'écrit `0.3.0-beta.1` : elle est publiée en pré-release et n'est jamais proposée aux apps stables.
 
-1. il monte la version dans `package.json`, `Cargo.toml` et `tauri.conf.json` ;
+Le script s'arrête si gh, git ou le remote ne sont pas Kwickos, si des modifications ne sont pas commitées, ou si les protections GitHub ont changé. Il fait ensuite, dans l'ordre :
+
+1. il monte la version dans `package.json`, `Cargo.toml` et `tauri.conf.json`, sur une branche `release/v<version>` ;
 2. il construit l'app universelle ;
 3. il vérifie que chaque binaire démarre sur macOS 13 ;
 4. il signe le paquet de mise à jour avec `~/.tauri/better-harness.key` (mot de passe dans le Trousseau, élément « better-harness updater key ») ;
-5. il pousse le commit et le tag, puis crée la release avec le `.dmg`, le `.app.tar.gz` et `latest.json`.
+5. il ouvre la PR `release: v<version>`, attend la CI, puis la merge en squash ;
+6. il tague ce commit de `main`, puis crée la release avec le `.dmg`, le `.app.tar.gz` et `latest.json`.
 
 **Sauvegarde la clé et son mot de passe.** Sans eux, les apps déjà installées ne pourront plus se mettre à jour.
 
-Le hook `.githooks/pre-push` refuse tout push vers un autre propriétaire que Kwickos, ou contenant un commit d'un autre auteur. Pour l'activer dans un nouveau clone :
-
-```bash
-git config core.hooksPath .githooks
-```
+Branches, PR, CI et protections GitHub : voir [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Ce qui le rend léger
 

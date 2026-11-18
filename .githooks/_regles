@@ -1,0 +1,14 @@
+# Sourcé par les hooks : lance scripts/regles.mjs du même dépôt que ce hook avec node.
+# Sans node, le hook refuse : une règle qui ne s'exécute pas ne doit rien laisser passer.
+racine=$(cd "$(dirname "$0")/.." && pwd)
+node=$(command -v node || true)
+if [ -z "$node" ]; then
+  for candidat in /opt/homebrew/bin/node /usr/local/bin/node "$HOME"/.nvm/versions/node/*/bin/node "$HOME"/.volta/bin/node; do
+    [ -x "$candidat" ] && node=$candidat
+  done
+fi
+if [ -z "$node" ]; then
+  echo "$(basename "$0") : node introuvable, impossible de vérifier les règles du dépôt." >&2
+  exit 1
+fi
+exec "$node" "$racine/scripts/regles.mjs" "$(basename "$0")" "$@"

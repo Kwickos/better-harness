@@ -1,0 +1,34 @@
+# Règles d'une PR (branche, titre, auteurs, version), exigées avant tout merge dans main
+# par le ruleset « main » (scripts/protections.mjs). Relancé quand le titre change.
+name: Règles
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regles-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  regles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: node --test scripts/regles.test.mjs
+      - run: node scripts/regles.mjs ci
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Règles du dépôt (CONTRIBUTING.md). Activé par npm install (core.hooksPath = .githooks).
+. "$(dirname "$0")/_regles"
