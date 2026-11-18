@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Better Harness : un client léger pour le CLI claude." />
+    <title>Better Harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar" aria-label="Conversations">
+        <div class="side-top" data-tauri-drag-region>
+          <button id="new-session" class="icon-btn" type="button" title="Nouvelle conversation  ⌘N" aria-label="Nouvelle conversation"><span data-icon="compose"></span></button>
+        </div>
+        <label class="side-search">
+          <span data-icon="search"></span>
+          <input id="search" type="search" placeholder="Rechercher" autocomplete="off" spellcheck="false" />
+        </label>
+        <nav id="threads" class="side-scroll fade-y"></nav>
+        <div class="side-foot">
+          <button id="open-settings" class="side-link" type="button"><span data-icon="settings"></span><span>Réglages</span></button>
+          <button id="update-btn" class="usage-btn update-btn" type="button" hidden><span data-icon="update"></span><span>Mettre à jour</span></button>
+          <button id="usage-btn" class="usage-btn" type="button" title="Limite restante" hidden><span data-icon="gauge"></span><span id="usage-value"></span></button>
+        </div>
+      </aside>
+
+      <main id="main">
+          <div id="convo">
+            <header id="bar" data-tauri-drag-region>
+              <div id="crumb" data-tauri-drag-region></div>
+              <div class="bar-actions">
+                <button id="more" class="icon-btn" type="button" title="Actions" aria-label="Actions de la conversation" hidden><span data-icon="more"></span></button>
+                <button id="toggle-diff" class="icon-btn" type="button" title="Modifications  ⌘⇧D" aria-label="Modifications"><span data-icon="gitDiff"></span></button>
+                <button id="toggle-servers" class="icon-btn" type="button" title="Serveurs  ⌘⇧S" aria-label="Serveurs"><span data-icon="server"></span></button>
+                <button id="toggle-artifacts" class="icon-btn" type="button" title="Artefacts  ⌘⇧A" aria-label="Artefacts" hidden><span data-icon="artifact"></span></button>
+                <button id="toggle-simulator" class="icon-btn" type="button" title="Simulateur  ⌘⇧M" aria-label="Simulateur"><span data-icon="device"></span></button>
+                <button id="toggle-browser" class="icon-btn" type="button" title="Navigateur  ⌘⇧B" aria-label="Navigateur"><span data-icon="globe"></span></button>
+              </div>
+            </header>
+
+            <section id="transcript" class="fade-y" aria-live="polite" hidden>
+              <div id="items" class="column"></div>
+              <div id="stream" class="column" hidden></div>
+              <div id="working" class="column" hidden><span id="working-label">Claude travaille</span><span class="dots" aria-hidden="true"></span></div>
+            </section>
+
+            <div id="dock">
+              <div id="start" class="column" hidden>
+                <p class="start-title">Sur quoi travaille-t-on ?</p>
+              </div>
+              <div id="world" class="column" aria-hidden="true"><div class="world-frame"><canvas></canvas><div class="world-bubbles"></div></div></div>
+              <div class="column">
+                <div id="limit" hidden></div>
+                <div id="perms"></div>
+                <form id="composer">
+                  <div id="mention-menu" hidden>
+                    <div id="mention-list" role="listbox" aria-label="Propositions"></div>
+                    <div id="mention-detail" hidden></div>
+                  </div>
+                  <div id="input" role="textbox" aria-multiline="true" aria-label="Message" contenteditable="plaintext-only" spellcheck="false" data-placeholder="Que doit faire Claude ?"></div>
+                  <div class="composer-bar">
+                    <button type="button" id="folder-btn" class="menu-btn" hidden><span id="folder-icon" class="mode-icon"></span><span id="folder-name"></span><span data-icon="chevronDown" class="chev"></span></button>
+                    <button type="button" id="model-btn" class="menu-btn"><span id="model-name"></span><span id="effort-name" class="soft"></span><span data-icon="chevronDown" class="chev"></span></button>
+                    <button type="button" id="mode-btn" class="menu-btn"><span id="mode-icon" class="mode-icon"></span><span id="mode-name"></span><span data-icon="chevronDown" class="chev"></span></button>
+                    <span class="spacer"></span>
+                    <button type="button" id="ctx-btn" class="ctx-btn" title="Contexte utilisé" aria-label="Contexte utilisé" hidden></button>
+                    <button type="button" id="stop" class="send-btn is-stop" title="Interrompre  Échap" aria-label="Interrompre" hidden><span data-icon="stop"></span></button>
+                    <button type="submit" id="send" class="send-btn" title="Envoyer  ↩" aria-label="Envoyer" disabled><span data-icon="send"></span></button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <aside id="panel" aria-label="Panneau" hidden>
+            <div id="panel-resize" title="Redimensionner"></div>
+            <div id="tab-browser" class="tab-body">
+              <div class="panel-head url-bar" data-tauri-drag-region>
+                <button id="b-back" class="icon-btn" type="button" aria-label="Précédente"><span data-icon="back"></span></button>
+                <button id="b-forward" class="icon-btn" type="button" aria-label="Suivante"><span data-icon="forward"></span></button>
+                <button id="b-reload" class="icon-btn" type="button" aria-label="Recharger"><span data-icon="reload"></span></button>
+                <form id="b-form" class="url-field"><input id="b-url" placeholder="localhost:5173 ou une adresse" spellcheck="false" autocomplete="off" /></form>
+                <button id="b-external" class="icon-btn" type="button" title="Ouvrir dans le navigateur par défaut" aria-label="Ouvrir à l'extérieur"><span data-icon="external"></span></button>
+              </div>
+              <div id="b-view">
+                <div id="b-empty">
+                  <p class="panel-title">Aperçu</p>
+                  <p class="panel-sub">Saisis une adresse, ou ouvre un serveur de dev en cours.</p>
+                  <div id="b-suggest" class="chips"></div>
+                </div>
+                <iframe id="b-frame" title="Aperçu" hidden></iframe>
+              </div>
+            </div>
+
+            <div id="tab-diff" class="tab-body">
+              <div class="panel-head" data-tauri-drag-region>
+                <b class="panel-name" data-tauri-drag-region>Modifications</b>
+                <span id="diff-branch" class="panel-soft" data-tauri-drag-region></span>
+                <span class="spacer" data-tauri-drag-region></span>
+                <span id="diff-total" class="panel-total"></span>
+              </div>
+              <div class="panel-scroll fade-y">
+                <ul id="diff-list" class="srv-list"></ul>
+                <p id="diff-note" class="diff-note" hidden>Liste limitée aux 500 premiers fichiers.</p>
+                <div id="diff-empty" class="panel-empty" hidden>
+                  <p id="diff-empty-title" class="panel-title"></p>
+                  <p id="diff-empty-sub" class="panel-sub"></p>
+                </div>
+              </div>
+            </div>
+
+            <div id="tab-artifacts" class="tab-body">
+              <div class="panel-head sim-head" data-tauri-drag-region>
+                <button id="art-pick" class="menu-btn" type="button" hidden><span id="art-name"></span><span data-icon="chevronDown" class="chev"></span></button>
+                <span class="spacer" data-tauri-drag-region></span>
+                <div id="art-actions" class="sim-actions" hidden>
+                  <button id="art-reload" class="icon-btn" type="button" title="Recharger" aria-label="Recharger" hidden><span data-icon="reload"></span></button>
+                  <button id="art-external" class="icon-btn" type="button" title="Ouvrir sur claude.ai" aria-label="Ouvrir sur claude.ai"><span data-icon="external"></span></button>
+                  <button id="art-delete" class="icon-btn" type="button" title="Supprimer" aria-label="Supprimer l'artefact"><span data-icon="trash"></span></button>
+                </div>
+              </div>
+              <div id="art-view">
+                <div id="art-empty" class="panel-empty" hidden>
+                  <p id="art-empty-title" class="panel-title"></p>
+                  <p id="art-empty-sub" class="panel-sub" hidden></p>
+                  <button id="art-empty-act" class="btn btn-primary" type="button"></button>
+                </div>
+              </div>
+            </div>
+
+            <div id="tab-simulator" class="tab-body">
+              <div class="panel-head sim-head" data-tauri-drag-region>
+                <button id="sim-device" class="menu-btn" type="button" hidden><span id="sim-device-name"></span><span data-icon="chevronDown" class="chev"></span></button>
+                <span class="spacer" data-tauri-drag-region></span>
+                <div id="sim-actions" class="sim-actions" hidden>
+                  <button id="sim-home" class="icon-btn" type="button" title="Accueil" aria-label="Accueil"><span data-icon="home"></span></button>
+                  <button id="sim-shot" class="icon-btn" type="button" title="Joindre une capture au message" aria-label="Joindre une capture au message"><span data-icon="camera"></span></button>
+                  <button id="sim-theme" class="icon-btn" type="button" hidden><span data-icon="moon"></span></button>
+                  <button id="sim-power" class="icon-btn" type="button" title="Éteindre" aria-label="Éteindre"><span data-icon="power"></span></button>
+                </div>
+              </div>
+              <div id="sim-stage">
+                <canvas id="sim-screen" tabindex="0" aria-label="Écran du simulateur" hidden></canvas>
+                <div id="sim-empty" class="panel-empty" hidden>
+                  <p id="sim-empty-title" class="panel-title"></p>
+                  <p id="sim-empty-sub" class="panel-sub" hidden></p>
+                  <button id="sim-empty-act" class="btn btn-primary" type="button" hidden></button>
+                </div>
+              </div>
+            </div>
+
+            <div id="tab-servers" class="tab-body">
+              <div class="panel-head" data-tauri-drag-region>
+                <b class="panel-name" data-tauri-drag-region>Serveurs</b>
+              </div>
+              <div class="panel-scroll fade-y">
+                <section id="srv-section" class="panel-section" hidden>
+                  <div class="section-head">Développement</div>
+                  <ul id="srv-list" class="srv-list"></ul>
+                </section>
+                <section id="mcp-section" class="panel-section" hidden>
+                  <div class="section-head">MCP</div>
+                  <ul id="mcp-list" class="srv-list"></ul>
+                </section>
+                <div id="srv-empty" class="panel-empty" hidden>
+                  <p class="panel-title">Aucun serveur</p>
+                  <p id="srv-empty-sub" class="panel-sub"></p>
+                </div>
+              </div>
+              <div id="logs-box" hidden>
+                <div class="logs-head"><span id="logs-title"></span><span class="spacer"></span><button id="logs-close" class="icon-btn sm" type="button" aria-label="Fermer les journaux"><span data-icon="close"></span></button></div>
+                <pre id="logs"></pre>
+              </div>
+            </div>
+          </aside>
+      </main>
+    </div>
+
+    <dialog id="dlg-settings" aria-labelledby="s-title">
+      <div class="settings">
+        <nav class="settings-nav">
+          <button class="snav" data-sec="general" type="button"><span data-icon="settings"></span>Général</button>
+          <button class="snav" data-sec="perf" type="button"><span data-icon="lightning"></span>Performance</button>
+          <button class="snav" data-sec="mcp" type="button"><span data-icon="plug"></span>Serveurs MCP</button>
+          <button class="snav" data-sec="archives" type="button"><span data-icon="archive"></span>Archives</button>
+          <button class="snav" data-sec="about" type="button"><span data-icon="info"></span>À propos</button>
+        </nav>
+        <div class="settings-main">
+          <header class="settings-head">
+            <h2 id="s-title" tabindex="-1">Général</h2>
+            <span id="s-saved" class="soft" hidden>Enregistré</span>
+            <button id="s-close" class="icon-btn" type="button" aria-label="Fermer"><span data-icon="close"></span></button>
+          </header>
+          <div id="s-body" class="settings-body fade-y"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <div id="toast" role="status" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

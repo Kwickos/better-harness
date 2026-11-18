@@ -1,0 +1,4 @@
+# Le binaire doit démarrer sur macOS 13 (Ventura, jusqu'à 13.7.8) : rustc et les dépendances en C
+# compilent pour cette version minimale, même quand la machine de build est plus récente.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "13.0"

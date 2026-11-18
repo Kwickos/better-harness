@@ -1,0 +1,28 @@
+{
+  "name": "better-harness",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri",
+    "app": "tauri dev",
+    "bundle": "tauri build",
+    "release": "node scripts/release.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-opener": "^2",
+    "dompurify": "^3.4.0",
+    "marked": "^18.0.0",
+    "motion": "14.6.0"
+  },
+  "devDependencies": {
+    "@phosphor-icons/core": "^2.1.1",
+    "@tauri-apps/cli": "^2.12.4",
+    "typescript": "^7.0.0",
+    "vite": "^8.0.0"
+  }
+}
