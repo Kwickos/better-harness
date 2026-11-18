@@ -56,6 +56,8 @@ xattr -dr com.apple.quarantine "/Applications/Better Harness.app"
 
 L'app cherche une nouvelle version 20 s après son lancement, puis toutes les 6 heures. Elle lit `latest.json` dans la dernière release de ce dépôt. Une version trouvée se télécharge en arrière-plan et sa signature est vérifiée. Ensuite, un bouton **Mettre à jour** apparaît en bas de la barre latérale. Si tu ne cliques pas, elle s'installe à la fermeture de l'app. **Réglages → À propos** permet aussi de lancer la recherche à la main.
 
+Au même endroit, le réglage **Canal de mise à jour** choisit ce que tu reçois. **Stable** (par défaut) lit la dernière release. **Bêta** prend la release la plus récente, bêta ou stable, via l'API GitHub. Revenir en stable garde la bêta installée jusqu'à une version stable plus haute : une mise à jour ne revient jamais en arrière.
+
 Le CLI `claude` est lui aussi tenu à jour : 40 s après le lancement, puis toutes les 6 heures, l'app lance `claude update`, qui le met à jour selon sa méthode d'installation et son canal de mises à jour. Les conversations en cours gardent leur version jusqu'à leur prochain démarrage. **Réglages → Général → Mise à jour automatique** le désactive, et **Réglages → À propos** le lance à la main.
 
 ### Publier une version
@@ -66,7 +68,7 @@ Les versions sont publiées depuis ce Mac, sous le compte GitHub **Kwickos** uni
 npm run release -- 0.2.0 "Ce qui change"
 ```
 
-Une bêta s'écrit `0.3.0-beta.1` : elle est publiée en pré-release et n'est jamais proposée aux apps stables.
+Une bêta s'écrit `0.3.0-beta.1` : elle est publiée en pré-release, proposée seulement aux apps sur le canal bêta.
 
 Le script s'arrête si gh, git ou le remote ne sont pas Kwickos, si des modifications ne sont pas commitées, ou si les protections GitHub ont changé. Il fait ensuite, dans l'ordre :
 

@@ -37,6 +37,8 @@ pub struct Settings {
     pub worktree_prefix: String,
     /// New conversations in a git repository start in their own worktree.
     pub worktree_default: bool,
+    /// "stable" (default) or "beta": beta also receives the pre-releases.
+    pub update_channel: String,
 }
 
 /// CLI tools loaded in every request though they are rarely used: Workflow
@@ -63,6 +65,7 @@ impl Default for Settings {
             language: "en".into(),
             worktree_prefix: "claude".into(),
             worktree_default: false,
+            update_channel: "stable".into(),
         }
     }
 }

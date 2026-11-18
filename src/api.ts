@@ -257,6 +257,8 @@ export interface Settings {
   worktreePrefix: string;
   /** New conversations in a git repository start in their own worktree. */
   worktreeDefault: boolean;
+  /** beta also receives the pre-releases (src-tauri/src/updates.rs). */
+  updateChannel: "stable" | "beta";
 }
 
 /** State of automatic updates (src-tauri/src/updates.rs). */
