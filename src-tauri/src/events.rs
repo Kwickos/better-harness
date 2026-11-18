@@ -172,4 +172,8 @@ pub enum UiEvent {
         state: String,
         message: Option<String>,
     },
+    /// The conversations' worktrees changed (made, removed).
+    Worktrees {
+        list: Vec<crate::worktree::Worktree>,
+    },
 }

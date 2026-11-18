@@ -17,6 +17,7 @@ mod shellenv;
 mod simulator;
 mod simulator_tool;
 mod updates;
+mod worktree;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -104,6 +105,10 @@ pub fn run() {
             commands::git_status,
             commands::git_diff,
             commands::git_discard,
+            commands::git_branches,
+            commands::list_worktrees,
+            commands::worktree_states,
+            commands::remove_worktree,
             commands::artifact_show,
             commands::artifact_bounds,
             commands::artifact_reload,

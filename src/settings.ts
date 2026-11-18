@@ -1,5 +1,5 @@
 // Settings: a panel with sections, saved automatically on every change.
-import type { Api, Settings, UpdateState } from "./api";
+import type { Api, Settings, UpdateState, WorktreeState } from "./api";
 import { icon } from "./icons";
 import { deleteNote, efforts, modes, effortLabel, modeOf, modelChoices, prettyModel } from "./labels";
 import { setWorldShown, worldShown } from "./world";
@@ -8,8 +8,8 @@ import { animateOut, enter } from "./motion";
 import { el } from "./transcript";
 import { LANGUAGES, fmtMb, onLangChange, setLang, t, tp } from "./i18n";
 
-type Section = "general" | "perf" | "mcp" | "archives" | "about";
-const titles = (): Record<Section, string> => ({ general: t("General"), perf: t("Performance"), mcp: t("MCP servers"), archives: t("Archives"), about: t("About") });
+type Section = "general" | "perf" | "mcp" | "worktrees" | "archives" | "about";
+const titles = (): Record<Section, string> => ({ general: t("General"), perf: t("Performance"), mcp: t("MCP servers"), worktrees: t("Worktrees"), archives: t("Archives"), about: t("About") });
 
 interface Deps {
   api: Api;
@@ -229,13 +229,61 @@ export function initSettings(d: Deps) {
     );
   }
 
+  /** What removing a worktree costs: nothing is lost, but its conversation closes. */
+  const removeNote = (w: WorktreeState) =>
+    `${
+      w.dirty
+        ? tp(w.dirty, "Its {n} uncommitted change goes to the Trash, the branch stays.", "Its {n} uncommitted changes go to the Trash, the branch stays.")
+        : w.commits
+          ? tp(w.commits, "The branch keeps its {n} commit.", "The branch keeps its {n} commits.")
+          : t("No changes: nothing is lost.")
+    } ${t("Its conversation closes; reopening it brings the worktree back.")}`;
+
+  async function renderWorktrees(body: HTMLElement) {
+    const prefix = el("input", "s-input");
+    prefix.placeholder = "claude";
+    prefix.value = s.worktreePrefix;
+    prefix.spellcheck = false;
+    prefix.addEventListener("change", () => save({ worktreePrefix: prefix.value.trim() || "claude" }, () => void rerender()));
+    body.append(
+      group(
+        null,
+        row(t("Worktree by default"), t("New conversations in a git repository start on a branch of their own, in .claude/worktrees."), toggle(s.worktreeDefault, (v) => save({ worktreeDefault: v }))),
+        row(t("Branch prefix"), t("Branches are named {prefix}/name.", { prefix: s.worktreePrefix || "claude" }), prefix),
+      ),
+    );
+    const list = (await d.guard(d.api.worktreeStates())) ?? [];
+    const rows = list.map((w) => {
+      const r = el("div", "s-row s-arch");
+      const text = el("div");
+      text.title = d.home(w.path);
+      const status = w.dirty ? tp(w.dirty, "{n} uncommitted change", "{n} uncommitted changes") : w.commits ? tp(w.commits, "{n} commit", "{n} commits") : t("No changes");
+      text.append(el("b", undefined, w.branch), el("small", undefined, `${d.home(w.repo)} · ${status}`));
+      const actions = el("div", "s-actions");
+      const del = el("button", "icon-btn");
+      del.type = "button";
+      del.title = t("Remove");
+      del.setAttribute("aria-label", t("Remove {name}", { name: w.branch }));
+      del.innerHTML = icon("trash");
+      del.addEventListener("click", () =>
+        confirmMenu(del, t("Remove this worktree?"), removeNote(w), t("Remove"), () => void d.guard(d.api.removeWorktree(w.path)).then(rerender), { align: "end" }),
+      );
+      actions.append(del);
+      r.append(text, actions);
+      return r;
+    });
+    if (rows.length) body.append(group(t("On disk"), ...rows));
+    else body.append(el("p", "s-note", t("No worktree on disk.")));
+    body.append(el("p", "s-note", t("Untracked files listed in .worktreeinclude (.env…) are copied into each new worktree.")));
+  }
+
   async function renderArchives(body: HTMLElement) {
     const list = (await d.guard(d.api.listArchived())) ?? [];
     if (!list.length) {
       body.append(el("p", "s-note", t("No archived conversations.")));
       return;
     }
-    const changed = async (action: Promise<void>) => {
+    const changed = async (action: Promise<unknown>) => {
       await d.guard(action);
       d.onHistoryChanged();
       await rerender();
@@ -315,7 +363,7 @@ export function initSettings(d: Deps) {
     const body = $("s-body");
     const scroll = body.scrollTop;
     const frag = el("div");
-    await { general: renderGeneral, perf: renderPerf, mcp: renderMcp, archives: renderArchives, about: renderAbout }[section](frag);
+    await { general: renderGeneral, perf: renderPerf, mcp: renderMcp, worktrees: renderWorktrees, archives: renderArchives, about: renderAbout }[section](frag);
     body.replaceChildren(...frag.childNodes);
     body.scrollTop = scroll;
     $("s-title").textContent = titles()[section];

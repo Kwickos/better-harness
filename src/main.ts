@@ -1,6 +1,6 @@
 import { fmtMb, fmtNumber, lang, onLangChange, setLang, t, tp, translateDom } from "./i18n";
 import "./errors";
-import { tauriApi, type UpdateState, type UsageWindows, type Api, type ContextUsage, type HistoryEntry, type PermissionEv, type ProcStat, type SessionInfo, type Settings, type UiEvent } from "./api";
+import { tauriApi, type UpdateState, type UsageWindows, type Api, type Branches, type ContextUsage, type HistoryEntry, type KeptWorktree, type PermissionEv, type ProcStat, type SessionInfo, type Settings, type UiEvent, type Worktree } from "./api";
 import { icon, type IconName } from "./icons";
 import { deleteNote, effectiveEffort, effortLabel, effortLevels, isCurrentModel, modes, modeOf, modelChoices, prettyModel, rememberDeletedArtifact, rememberModels, setCliDefaults, SIM_TOOL, simulatorAction, artifactAction } from "./labels";
 import { closeMenu, confirmMenu, menuElement, menuItem, onMenuChange, segmented, showMenu, type MenuEntry } from "./menu";
@@ -35,8 +35,25 @@ let history: HistoryEntry[] = [];
 let appHome = "";
 /** Folder for conversations started without a project. */
 let scratchDir = "";
-/** Conversation not created yet: it is born with the first message sent. Empty `cwd`: no folder. */
-const draft: { cwd: string; model: string | null; mode: string; effort: string | null; advisor: string | null } = { cwd: "", model: null, mode: "default", effort: null, advisor: null };
+/** Worktrees made for conversations (removed ones included), by folder. */
+const worktrees = new Map<string, Worktree>();
+/** Branches of the folders offered in the composer: a worktree needs a repository with a commit. */
+const branchInfo = new Map<string, Branches>();
+/** The worktree of the conversation being born is being made: the composer waits. */
+let creatingWorktree = false;
+/**
+ * Conversation not created yet: it is born with the first message sent. Empty `cwd`: no folder.
+ * `worktree`: it starts in its own worktree, from `base` (null: the folder's current branch).
+ */
+const draft: { cwd: string; model: string | null; mode: string; effort: string | null; advisor: string | null; worktree: boolean; base: string | null } = {
+  cwd: "",
+  model: null,
+  mode: "default",
+  effort: null,
+  advisor: null,
+  worktree: false,
+  base: null,
+};
 
 const renderer = new TranscriptRenderer(
   $("transcript"),
@@ -61,6 +78,17 @@ const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
 const home = (p: string) => (appHome && p.startsWith(appHome) ? `~${p.slice(appHome.length)}` : p);
 const noFolder = () => t("No folder");
 const projectName = (cwd: string) => (cwd === scratchDir ? noFolder() : base(cwd));
+const WORKTREE_DIR = "/.claude/worktrees/";
+/** The repository a folder belongs to: a worktree's conversations sit with their project (Claude Desktop's worktrees too). */
+function repoOf(cwd: string): string {
+  const known = worktrees.get(cwd);
+  if (known) return known.repo;
+  const i = cwd.indexOf(WORKTREE_DIR);
+  return i > 0 ? cwd.slice(0, i) : cwd;
+}
+const inWorktree = (cwd: string) => repoOf(cwd) !== cwd;
+/** A worktree's branch, or its folder name when the app didn't make it. */
+const branchOf = (cwd: string) => worktrees.get(cwd)?.branch ?? base(cwd);
 
 let toastTimer = 0;
 function toast(text: string) {
@@ -139,6 +167,7 @@ const settingsUi = initSettings({
       draft.model = s.defaultModel;
       draft.effort = s.defaultEffort;
       draft.mode = s.defaultPermissionMode;
+      draft.worktree = s.worktreeDefault;
       renderComposer();
     }
   },
@@ -234,11 +263,13 @@ function drawSidebar() {
   const key = JSON.stringify([active, [...expanded], projectOrder, query(), list.map((t) => [t.sid ?? t.hist?.cliId, t.title, t.activity, t.cwd])]);
   if (key === sidebarKey) return;
   sidebarKey = key;
+  // A worktree's conversations sit under their repository.
   const groups = new Map<string, Thread[]>();
-  for (const t of list) {
-    const g = groups.get(t.cwd);
-    if (g) g.push(t);
-    else groups.set(t.cwd, [t]);
+  for (const thread of list) {
+    const repo = repoOf(thread.cwd);
+    const g = groups.get(repo);
+    if (g) g.push(thread);
+    else groups.set(repo, [thread]);
   }
   const nav = $("threads");
   if (groups.size === 0) {
@@ -549,8 +580,14 @@ function threadRow(thread: Thread): HTMLElement {
   // Computed on hover: memory use must not force a list rebuild.
   li.addEventListener("mouseenter", () => {
     const m = thread.sid ? rss.get(thread.sid) : undefined;
-    li.title = `${thread.title}\n${home(thread.cwd)}${m ? `\n${t("{size} in memory", { size: fmtMb(m.rssMb) })}` : ""}`;
+    const branch = inWorktree(thread.cwd) ? `\n${branchOf(thread.cwd)}` : "";
+    li.title = `${thread.title}${branch}\n${home(thread.cwd)}${m ? `\n${t("{size} in memory", { size: fmtMb(m.rssMb) })}` : ""}`;
   });
+  if (inWorktree(thread.cwd)) {
+    const mark = el("span", "thread-wt");
+    mark.innerHTML = icon("gitBranch", 12);
+    li.append(mark);
+  }
   li.append(el("span", "thread-title", thread.title));
   if (thread.activity) {
     const st = el("span", `thread-state is-${thread.activity}`);
@@ -587,6 +624,16 @@ async function removeConversation(cliId: string, action: () => Promise<void>) {
   renderSidebar();
 }
 
+/** A worktree with uncommitted changes stays on disk when its conversation goes: say where to remove it. */
+function keptNotice(kept: KeptWorktree | null) {
+  if (!kept) return;
+  toast(
+    tp(kept.dirty, "Worktree {branch} kept: it has {n} uncommitted change. Settings → Worktrees removes it.", "Worktree {branch} kept: it has {n} uncommitted changes. Settings → Worktrees removes it.", {
+      branch: kept.branch,
+    }),
+  );
+}
+
 function threadMenu(thread: Thread, anchor: HTMLElement) {
   const v = thread.sid ? views.get(thread.sid) : undefined;
   const cliId = thread.hist?.cliId ?? v?.info.cliId;
@@ -596,8 +643,8 @@ function threadMenu(thread: Thread, anchor: HTMLElement) {
     showMenu(anchor, [{ label: t("Close"), icon: "close", run: () => void guard(api.close(thread.sid!)) }], opts);
     return;
   }
-  const archive = () => void removeConversation(cliId, () => api.setArchived(cliId, true));
-  const remove = () => void removeConversation(cliId, () => api.deleteConversation(cliId));
+  const archive = () => void removeConversation(cliId, () => api.setArchived(cliId, true).then(keptNotice));
+  const remove = () => void removeConversation(cliId, () => api.deleteConversation(cliId).then(keptNotice));
   const busy = v?.info.state === "busy";
   showMenu(
     anchor,
@@ -655,7 +702,14 @@ function renderMain() {
   if (v) {
     const title = el("b", undefined, v.info.title);
     const renamed = crumbSid === v.info.sid && crumb.querySelector("b")?.textContent !== v.info.title;
-    crumb.replaceChildren(el("span", "crumb-dir", projectName(v.info.cwd)), title);
+    const parts = [el("span", "crumb-dir", projectName(repoOf(v.info.cwd)))];
+    if (inWorktree(v.info.cwd)) {
+      const branch = el("span", "crumb-branch");
+      branch.innerHTML = icon("gitBranch", 12);
+      branch.append(branchOf(v.info.cwd));
+      parts.push(branch);
+    }
+    crumb.replaceChildren(...parts, title);
     crumb.title = home(v.info.cwd);
     if (renamed) textIn(title);
     crumbSid = v.info.sid;
@@ -701,9 +755,67 @@ function renderComposer() {
   // During a reply: "stop"; typing brings "send" back, to queue the message.
   setShown($("stop"), busy);
   setShown($("send"), !busy || has);
-  ($("send") as HTMLButtonElement).disabled = !has;
+  ($("send") as HTMLButtonElement).disabled = !has || creatingWorktree;
+  renderWorktreeChoice();
   renderContext();
 }
+
+/** Where a new conversation works: in the folder, or in a worktree of its repository (which needs a commit). */
+function worktreeInfo(): Branches | undefined {
+  const info = !activeView() && draft.cwd ? branchInfo.get(draft.cwd) : undefined;
+  return info?.isRepo && info.hasHead ? info : undefined;
+}
+
+function renderWorktreeChoice() {
+  const btn = $("wt-btn");
+  const info = worktreeInfo();
+  btn.hidden = !info;
+  btn.classList.toggle("is-busy", creatingWorktree);
+  if (!info) return;
+  if (creatingWorktree) {
+    setIcon($("wt-icon"), "spinner");
+    swapText($("wt-name"), t("Creating the worktree…"));
+    swapText($("wt-base"), "");
+    return;
+  }
+  setIcon($("wt-icon"), draft.worktree ? "gitBranch" : "laptop");
+  swapText($("wt-name"), draft.worktree ? t("Worktree") : t("Local"));
+  swapText($("wt-base"), draft.worktree ? (draft.base ?? info.current ?? "") : "");
+  btn.title = draft.worktree ? t("A branch and a copy of its own") : t("Claude works directly in the folder");
+}
+
+async function refreshBranches() {
+  const cwd = draft.cwd;
+  if (!cwd) return renderComposer();
+  const info = await api.gitBranches(cwd).catch(() => null);
+  if (info) branchInfo.set(cwd, info);
+  if (draft.cwd === cwd) renderComposer();
+}
+
+function setWorktree(on: boolean, from: string | null = draft.base) {
+  draft.worktree = on;
+  draft.base = on ? from : null;
+  renderComposer();
+  composer.focus();
+}
+
+$("wt-btn").addEventListener("click", (e) => {
+  const info = worktreeInfo();
+  if (!info || creatingWorktree) return;
+  const from = draft.base ?? info.current;
+  const entries: MenuEntry[] = [
+    { label: t("Local"), hint: t("Claude works directly in the folder"), icon: "laptop", checked: !draft.worktree, run: () => setWorktree(false) },
+    { label: t("Worktree"), hint: t("A branch and a copy of its own"), icon: "gitBranch", checked: draft.worktree, run: () => setWorktree(true) },
+  ];
+  // Other conversations' branches would crowd the list: they stay out of it.
+  const taken = new Set([...worktrees.values()].map((w) => w.branch));
+  const branches = info.list.filter((b) => b === info.current || !taken.has(b)).slice(0, 8);
+  if (branches.length > 1) {
+    entries.push({ heading: t("Start from") });
+    for (const b of branches) entries.push({ label: b, detail: b === info.current ? t("current") : undefined, checked: draft.worktree && b === from, run: () => setWorktree(true, b === info.current ? null : b) });
+  }
+  showMenu(e.currentTarget as HTMLElement, entries, { place: "above", minWidth: 270 });
+});
 
 /** Context gauge: a discreet ring, details on click. */
 function renderContext() {
@@ -922,7 +1034,8 @@ $("mode-btn").addEventListener("click", (e) => {
 });
 
 function knownDirs(): string[] {
-  return [...new Set([...(settings?.recentDirs ?? []), ...history.map((h) => h.cwd)])].filter((d) => d && d !== scratchDir);
+  // A worktree is offered through its repository.
+  return [...new Set([...(settings?.recentDirs ?? []), ...history.map((h) => h.cwd)].map(repoOf))].filter((d) => d && d !== scratchDir);
 }
 async function chooseFolder() {
   let dir: string | null = null;
@@ -937,7 +1050,9 @@ async function chooseFolder() {
 }
 function setDraftCwd(dir: string) {
   draft.cwd = dir === scratchDir ? "" : dir;
+  draft.base = null;
   renderComposer();
+  void refreshBranches();
   void refreshCliDefaults();
   panel.contextChanged();
   composer.focus();
@@ -995,6 +1110,8 @@ $("more").addEventListener("click", (e) => {
   const entries: MenuEntry[] = [
     { label: t("Show in Finder"), icon: "folder", run: () => reveal(v.info.cwd) },
   ];
+  const wt = worktrees.get(v.info.cwd);
+  if (wt) entries.push({ label: t("Copy branch name"), hint: wt.branch, icon: "gitBranch", run: () => void guard(api.copyText(wt.branch)) });
   if (live) entries.push({ sep: true }, { label: t("Suspend process"), hint: t("Frees memory, resumes on the next message"), icon: "cpu", run: () => void guard(api.suspend(v.info.sid)) });
   entries.push({ sep: true }, {
     label: t("Close conversation"),
@@ -1214,6 +1331,9 @@ function newConversation(cwd?: string) {
   draft.model = settings.defaultModel;
   draft.effort = settings.defaultEffort;
   draft.mode = settings.defaultPermissionMode;
+  draft.worktree = settings.worktreeDefault;
+  draft.base = null;
+  void refreshBranches();
   void refreshCliDefaults();
   void api.focus(null);
   showConversation(undefined);
@@ -1304,6 +1424,13 @@ function onEvent(ev: UiEvent) {
       rememberModels(ev.models);
       renderComposer();
       return;
+    case "worktrees":
+      worktrees.clear();
+      for (const w of ev.list) worktrees.set(w.path, w);
+      sidebarKey = "";
+      renderSidebar();
+      renderMain();
+      return;
   }
   const v = ev.sid ? views.get(ev.sid) : undefined;
   if (!v) {
@@ -1391,8 +1518,22 @@ async function sendText(text: string) {
   if (!v) {
     const dir = draft.cwd || scratchDir;
     if (!dir) return void $("folder-btn").click();
-    const info = await guard(api.createSession({ cwd: dir, model: draft.model, permissionMode: draft.mode, effort: draft.effort, advisor: draft.advisor }));
-    if (!info) return;
+    // The worktree is named after the first message, like the conversation.
+    const worktree = draft.worktree && worktreeInfo() ? { base: draft.base, hint: text } : null;
+    if (worktree) {
+      creatingWorktree = true;
+      renderComposer();
+    }
+    const info = await guard(api.createSession({ cwd: dir, model: draft.model, permissionMode: draft.mode, effort: draft.effort, advisor: draft.advisor, worktree }));
+    if (worktree) {
+      creatingWorktree = false;
+      renderComposer();
+    }
+    if (!info) {
+      // The message isn't lost: it comes back to the field.
+      if (!composer.text().trim()) composer.setText(text);
+      return;
+    }
     v = view(info);
     await activate(info.sid);
   }
@@ -1403,7 +1544,7 @@ async function sendText(text: string) {
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
   const text = composer.text().trim();
-  if (!text) return;
+  if (!text || creatingWorktree) return;
   composer.clear();
   void sendText(text);
 });
@@ -1504,8 +1645,10 @@ async function boot() {
   draft.model = settings.defaultModel;
   draft.mode = settings.defaultPermissionMode;
   draft.effort = settings.defaultEffort;
+  draft.worktree = settings.worktreeDefault;
   const lastDir = settings.recentDirs[0] ?? "";
   draft.cwd = lastDir === scratchDir ? "" : lastDir;
+  for (const w of await api.listWorktrees().catch(() => [])) worktrees.set(w.path, w);
   for (const info of await api.listSessions()) view(info);
   const first = [...views.values()].sort((a, b) => b.info.lastActiveMs - a.info.lastActiveMs)[0];
   if (first) await activate(first.info.sid);
@@ -1516,8 +1659,8 @@ async function boot() {
   drawSidebar();
   goLive();
   if (!settings.recentDirs.length && history[0] && history[0].cwd !== scratchDir) {
-    draft.cwd = history[0].cwd;
-    renderComposer();
+    draft.cwd = repoOf(history[0].cwd);
+    void refreshBranches();
   }
 }
 void boot().finally(() => {

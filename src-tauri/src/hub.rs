@@ -16,10 +16,11 @@ use crate::protocol::{
     truncate_middle, user_message, TOOL_RESULT_MAX,
 };
 use crate::settings::Settings;
+use crate::worktree::{self, Worktree};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -172,6 +173,27 @@ pub struct CreateOpts {
     pub effort: Option<String>,
     #[serde(default)]
     pub advisor: Option<String>,
+    /// Start in a new worktree of the folder's repository.
+    #[serde(default)]
+    pub worktree: Option<NewWorktree>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewWorktree {
+    /// Branch to start from; None = the folder's current branch.
+    pub base: Option<String>,
+    /// The first message, which names the worktree and its branch.
+    pub hint: Option<String>,
+}
+
+/// A worktree left on disk because it has uncommitted changes: the UI says so.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeptWorktree {
+    pub path: String,
+    pub branch: String,
+    pub dirty: usize,
 }
 
 /// Enough to get the topic: the CLI does not need a whole long paste to name it.
@@ -186,6 +208,8 @@ pub struct Hub {
     archived: Mutex<BTreeSet<String>>,
     /// CLI commands per working folder, with the time they were read.
     commands: Mutex<HashMap<String, (Instant, Value)>>,
+    /// Worktrees made for conversations, removed ones included: reopening the conversation puts them back.
+    worktrees: Mutex<Vec<Worktree>>,
     config_dir: PathBuf,
     cache_dir: PathBuf,
     gen: AtomicU64,
@@ -200,6 +224,10 @@ impl Hub {
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
+        let worktrees = std::fs::read(config_dir.join("worktrees.json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default();
         Arc::new(Self {
             app,
             sessions: Mutex::new(HashMap::new()),
@@ -207,6 +235,7 @@ impl Hub {
             settings: Mutex::new(settings),
             archived: Mutex::new(archived),
             commands: Mutex::new(HashMap::new()),
+            worktrees: Mutex::new(worktrees),
             config_dir,
             cache_dir,
             gen: AtomicU64::new(1),
@@ -360,7 +389,26 @@ impl Hub {
 
     // ---------- lifecycle ----------
 
-    pub fn create(&self, o: CreateOpts) -> Result<SessionInfo, String> {
+    /// Opens a session, after making its worktree if one is asked for, or putting back the
+    /// removed worktree of a conversation being reopened.
+    pub async fn create_session(self: &Arc<Self>, mut o: CreateOpts) -> Result<SessionInfo, String> {
+        let env_path = crate::shellenv::path().await;
+        let mut picked = None;
+        if let Some(new) = o.worktree.take() {
+            let prefix = self.settings.lock().unwrap().worktree_prefix.clone();
+            let (wt, _copied) = worktree::create(env_path, &o.cwd, new.base.as_deref(), &prefix, new.hint.as_deref().unwrap_or("")).await?;
+            picked = Some(std::mem::replace(&mut o.cwd, wt.path.clone()));
+            self.keep_worktree(wt);
+        } else if o.resume.is_some() && !Path::new(&o.cwd).is_dir() {
+            if let Some(wt) = self.worktree_at(&o.cwd) {
+                worktree::restore(env_path, &wt).await?;
+            }
+        }
+        self.create(o, picked.as_deref())
+    }
+
+    /// `picked`: the folder to remember in the recent ones, when the session runs in a worktree of it.
+    fn create(&self, o: CreateOpts, picked: Option<&str>) -> Result<SessionInfo, String> {
         let cwd = o.cwd.trim().trim_end_matches('/').to_string();
         let cwd = if cwd.is_empty() { "/".to_string() } else { cwd };
         if !std::path::Path::new(&cwd).is_dir() {
@@ -368,7 +416,7 @@ impl Hub {
         }
         let (model, mode, mcp, effort) = {
             let mut s = self.settings.lock().unwrap();
-            s.remember_dir(&cwd);
+            s.remember_dir(picked.unwrap_or(&cwd));
             let _ = s.save(&self.config_dir.join("settings.json"));
             let mcp = match o.mcp {
                 Some(v) => Some(v),
@@ -676,6 +724,106 @@ impl Hub {
         proc
     }
 
+    // ---------- worktrees ----------
+
+    pub fn worktrees(&self) -> Vec<Worktree> {
+        self.worktrees.lock().unwrap().clone()
+    }
+
+    fn worktree_at(&self, path: &str) -> Option<Worktree> {
+        self.worktrees.lock().unwrap().iter().find(|w| w.path == path).cloned()
+    }
+
+    fn save_worktrees(&self) {
+        let list = self.worktrees();
+        let path = self.config_dir.join("worktrees.json");
+        let tmp = path.with_extension("json.tmp");
+        let _ = std::fs::create_dir_all(&self.config_dir)
+            .and_then(|_| std::fs::write(&tmp, serde_json::to_vec_pretty(&list).unwrap_or_default()))
+            .and_then(|_| std::fs::rename(&tmp, &path));
+        self.emit(UiEvent::Worktrees { list });
+    }
+
+    fn keep_worktree(&self, wt: Worktree) {
+        {
+            let mut list = self.worktrees.lock().unwrap();
+            list.retain(|w| w.path != wt.path);
+            list.push(wt);
+        }
+        self.save_worktrees();
+    }
+
+    fn forget_worktree(&self, path: &str) {
+        self.worktrees.lock().unwrap().retain(|w| w.path != path);
+        self.save_worktrees();
+    }
+
+    /// Worktrees still on disk, with their changes and commits.
+    pub async fn worktree_states(&self) -> Vec<worktree::WorktreeState> {
+        let env_path = crate::shellenv::path().await;
+        let mut out = Vec::new();
+        for wt in self.worktrees() {
+            let st = worktree::state(env_path, &wt).await;
+            if st.exists {
+                out.push(st);
+            }
+        }
+        out.sort_by_key(|s| std::cmp::Reverse(s.worktree.created_ms));
+        out
+    }
+
+    /// Stops the sessions open in a folder and waits for their processes to exit.
+    async fn close_in(&self, cwd: &str) {
+        let sids: Vec<String> = self.sessions.lock().unwrap().values().filter(|s| s.p.cwd == cwd).map(|s| s.p.sid.clone()).collect();
+        for sid in sids {
+            if let Some(proc) = self.remove_session(&sid) {
+                stop_process(proc).await;
+            }
+        }
+    }
+
+    /// Removes a worktree from disk (its changes go to the Trash). Its conversations close;
+    /// reopening one puts the worktree back.
+    pub async fn remove_worktree(&self, path: &str) -> Result<(), String> {
+        let wt = self.worktree_at(path).ok_or(tr("Unknown worktree.", "Worktree inconnu."))?;
+        self.close_in(&wt.path).await;
+        worktree::remove(crate::shellenv::path().await, &wt, crate::history::to_trash).await?;
+        self.save_worktrees();
+        Ok(())
+    }
+
+    /// Once its conversation is archived or deleted, a clean worktree goes (nothing is lost: its branch
+    /// stays if it holds commits). One with uncommitted changes stays on disk and is returned.
+    async fn release_worktree(&self, cwd: Option<String>, forget: bool) -> Option<KeptWorktree> {
+        let wt = self.worktree_at(&cwd?)?;
+        if self.sessions.lock().unwrap().values().any(|s| s.p.cwd == wt.path) {
+            return None;
+        }
+        let env_path = crate::shellenv::path().await;
+        let st = worktree::state(env_path, &wt).await;
+        if st.dirty > 0 {
+            return Some(KeptWorktree { path: wt.path, branch: wt.branch, dirty: st.dirty });
+        }
+        if st.exists {
+            if let Err(e) = worktree::remove(env_path, &wt, crate::history::to_trash).await {
+                self.notice(None, "warn", e);
+                return None;
+            }
+        }
+        if forget {
+            self.forget_worktree(&wt.path);
+        } else {
+            self.save_worktrees();
+        }
+        None
+    }
+
+    /// Working folder of a conversation, open or not.
+    fn conversation_cwd(&self, cli_id: &str) -> Option<String> {
+        let open = self.sessions.lock().unwrap().values().find(|s| s.p.cli_id.as_deref() == Some(cli_id)).map(|s| s.p.cwd.clone());
+        open.or_else(|| crate::history::entries(&HashSet::from([cli_id.to_string()])).into_iter().next().map(|e| e.cwd))
+    }
+
     /// Folder for conversations started without a project: the CLI always needs a working folder.
     pub fn scratch_dir(&self) -> Result<String, String> {
         let dir = self.config_dir.join("sans-dossier");
@@ -776,7 +924,7 @@ impl Hub {
     }
 
     /// Archives (closing the session open on it) or restores a conversation.
-    pub fn set_archived(&self, cli_id: &str, on: bool) -> Result<(), String> {
+    pub async fn set_archived(&self, cli_id: &str, on: bool) -> Result<Option<KeptWorktree>, String> {
         let ids = {
             let mut set = self.archived.lock().unwrap();
             if on {
@@ -792,17 +940,22 @@ impl Hub {
             .and_then(|_| std::fs::write(&tmp, serde_json::to_vec_pretty(&ids).unwrap_or_default()))
             .and_then(|_| std::fs::rename(&tmp, &path))
             .map_err(|e| e.to_string())?;
-        if on {
-            if let Some(sid) = self.sid_of(cli_id) {
-                self.close(&sid);
+        if !on {
+            return Ok(None);
+        }
+        let cwd = self.conversation_cwd(cli_id);
+        if let Some(sid) = self.sid_of(cli_id) {
+            if let Some(proc) = self.remove_session(&sid) {
+                stop_process(proc).await;
             }
         }
-        Ok(())
+        Ok(self.release_worktree(cwd, false).await)
     }
 
     /// Moves a conversation to the Trash. Its process is stopped for good first:
     /// otherwise its last write would recreate the transcript.
-    pub async fn delete_conversation(&self, cli_id: &str) -> Result<(), String> {
+    pub async fn delete_conversation(&self, cli_id: &str) -> Result<Option<KeptWorktree>, String> {
+        let cwd = self.conversation_cwd(cli_id);
         if let Some(sid) = self.sid_of(cli_id) {
             if let Some(proc) = self.remove_session(&sid) {
                 stop_process(proc).await;
@@ -810,7 +963,8 @@ impl Hub {
         }
         let id = cli_id.to_string();
         tauri::async_runtime::spawn_blocking(move || crate::history::trash(&id)).await.map_err(|e| e.to_string())??;
-        self.set_archived(cli_id, false)
+        self.set_archived(cli_id, false).await?;
+        Ok(self.release_worktree(cwd, true).await)
     }
 
     /// App shutdown: kill all process groups immediately.

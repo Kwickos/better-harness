@@ -1,6 +1,6 @@
 // Simulated backend, loaded only outside Tauri (browser): lets you work on
 // the design and rendering (streaming, tools, permissions) without starting the CLI.
-import type { Api, Attachment, UpdateState, Block, GitFile, HistoryEntry, ServerInfo, SessionInfo, SimDevice, Settings, UiEvent } from "./api";
+import type { Api, Attachment, UpdateState, Block, GitFile, HistoryEntry, ServerInfo, SessionInfo, SimDevice, Settings, UiEvent, Worktree, WorktreeState } from "./api";
 
 let emit: (e: UiEvent) => void = () => {};
 const now = Date.now();
@@ -37,9 +37,39 @@ const history: HistoryEntry[] = [
   ["c4", "/Users/demo/Code/billing-api", "Add partial credit notes", 2 * 86400_000],
   ["c5", "/Users/demo/Code/scripts", "Photo backup script", 5 * 86400_000],
   ["c6", "/Users/demo/Code/studio-site", "Convert images to AVIF", 9 * 86400_000],
+  ["c7", "/Users/demo/Code/better-harness/.claude/worktrees/fix-login-redirect-3f2a1c", "Fix the login redirect", 50 * 60_000],
 ].map(([cliId, cwd, title, ago]) => ({ cliId: cliId as string, cwd: cwd as string, title: title as string, mtimeMs: now - (ago as number), size: 2_400_000 }));
 
 const archived = new Set<string>();
+
+/** Worktrees made for conversations, with what the Settings show of them. */
+const worktrees: WorktreeState[] = [
+  {
+    path: "/Users/demo/Code/better-harness/.claude/worktrees/fix-login-redirect-3f2a1c",
+    repo: "/Users/demo/Code/better-harness",
+    branch: "claude/fix-login-redirect-3f2a1c",
+    base: "main",
+    baseCommit: "9f9d917",
+    createdMs: now - 50 * 60_000,
+    exists: true,
+    dirty: 3,
+    commits: 1,
+  },
+];
+const worktreeList = (): Worktree[] => worktrees.map(({ path, repo, branch, base, baseCommit, createdMs }) => ({ path, repo, branch, base, baseCommit, createdMs }));
+const emitWorktrees = () => emit({ kind: "worktrees", list: worktreeList() });
+const cwdOf = (cliId: string) => [...sessions.values()].find((s) => s.cliId === cliId)?.cwd ?? history.find((h) => h.cliId === cliId)?.cwd;
+/** Like the core: a clean worktree goes with its conversation, one with changes stays on disk. */
+function releaseWorktree(cliId: string, forget: boolean) {
+  const i = worktrees.findIndex((w) => w.path === cwdOf(cliId));
+  if (i < 0) return null;
+  const w = worktrees[i];
+  if (w.exists && w.dirty) return { path: w.path, branch: w.branch, dirty: w.dirty };
+  w.exists = false;
+  if (forget) worktrees.splice(i, 1);
+  emitWorktrees();
+  return null;
+}
 const SCRATCH = "/Users/demo/Library/Application Support/Better Harness/sans-dossier";
 const gitFiles: GitFile[] = [
   { path: "src/main.ts", oldPath: null, status: "M", added: 12, removed: 3 },
@@ -85,6 +115,8 @@ let settings: Settings = {
   partialMessages: true,
   allTools: false,
   recentDirs: ["/Users/demo/Code/better-harness", "/Users/demo/Code/billing-api", "/Users/demo/Code/studio-site", "/Users/demo/Code/ws", "/Users/demo/Archive/ws", "/Users/demo/Code/internal-tools", "/Users/demo/Code/marketing-site"],
+  worktreePrefix: "claude",
+  worktreeDefault: false,
   // Settings live in memory here: keep the language across reloads, like the real app does.
   language: (() => {
     try {
@@ -324,6 +356,24 @@ export const mockApi: Api = {
   listSessions: async () => [...sessions.values()].map((s) => ({ ...s })),
   createSession: async (o) => {
     const sid = `s${Date.now()}`;
+    if (o.worktree) {
+      await sleep(800);
+      const slug =
+        (o.worktree.hint ?? "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f']/g, "")
+          .split(/[^a-z0-9]+/)
+          .filter(Boolean)
+          .slice(0, 4)
+          .join("-") || "session";
+      const name = `${slug}-${Math.random().toString(16).slice(2, 8)}`;
+      const repo = o.cwd;
+      const path = `${repo}/.claude/worktrees/${name}`;
+      worktrees.unshift({ path, repo, branch: `${settings.worktreePrefix}/${name}`, base: o.worktree.base ?? "main", baseCommit: "9f9d917", createdMs: Date.now(), exists: true, dirty: 0, commits: 0 });
+      emitWorktrees();
+      o = { ...o, cwd: path };
+    }
     const s = mk({ sid, title: o.title ?? "New session", cwd: o.cwd, cliId: o.resume ?? null, model: o.model ?? null, advisor: o.advisor ?? null, state: o.resume ? "suspended" : "idle", mcpLabel: o.mcp ? (o.mcp.length ? o.mcp.join(", ") : "none") : "all" });
     sessions.set(sid, s);
     queueMicrotask(() => emit({ kind: "sessionUpdate", session: { ...s } }));
@@ -392,19 +442,41 @@ export const mockApi: Api = {
   },
   listArchived: async () => history.filter((h) => archived.has(h.cliId)),
   setArchived: async (cliId, on) => {
-    if (on) {
-      archived.add(cliId);
-      closeByCliId(cliId);
-    } else {
+    if (!on) {
       archived.delete(cliId);
+      return null;
     }
+    archived.add(cliId);
+    const kept = releaseWorktree(cliId, false);
+    closeByCliId(cliId);
+    return kept;
   },
   deleteConversation: async (cliId) => {
+    const kept = releaseWorktree(cliId, true);
     closeByCliId(cliId);
     archived.delete(cliId);
     const i = history.findIndex((h) => h.cliId === cliId);
     if (i >= 0) history.splice(i, 1);
+    return kept;
   },
+  gitBranches: async (cwd) =>
+    cwd.includes("scripts") || cwd === SCRATCH
+      ? { isRepo: false, hasHead: false, current: null, list: [] }
+      : { isRepo: true, hasHead: true, current: "main", list: ["main", ...worktrees.filter((w) => w.repo === cwd).map((w) => w.branch), "release", "fix/menu-flicker"] },
+  listWorktrees: async () => worktreeList(),
+  worktreeStates: async () => worktrees.filter((w) => w.exists).map((w) => ({ ...w })),
+  removeWorktree: async (path) => {
+    for (const [sid, s] of sessions) {
+      if (s.cwd === path) {
+        sessions.delete(sid);
+        emit({ kind: "sessionRemoved", sid });
+      }
+    }
+    const w = worktrees.find((x) => x.path === path);
+    if (w) w.exists = false;
+    emitWorktrees();
+  },
+  copyText: async (text) => navigator.clipboard?.writeText(text),
   loadTranscript: async (sid, cliId) => {
     // A large conversation: reading it takes longer than the transition waits.
     if (cliId === "c5") await sleep(600);

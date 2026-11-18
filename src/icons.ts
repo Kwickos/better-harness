@@ -11,6 +11,8 @@ import circleNotch from "@phosphor-icons/core/assets/bold/circle-notch-bold.svg?
 import arrowUUpLeft from "@phosphor-icons/core/assets/regular/arrow-u-up-left.svg?raw";
 import folderDashed from "@phosphor-icons/core/assets/regular/folder-dashed.svg?raw";
 import gitDiff from "@phosphor-icons/core/assets/regular/git-diff.svg?raw";
+import gitBranch from "@phosphor-icons/core/assets/regular/git-branch.svg?raw";
+import laptop from "@phosphor-icons/core/assets/regular/laptop.svg?raw";
 import brain from "@phosphor-icons/core/assets/regular/brain.svg?raw";
 import camera from "@phosphor-icons/core/assets/regular/camera.svg?raw";
 import deviceMobile from "@phosphor-icons/core/assets/regular/device-mobile.svg?raw";
@@ -57,6 +59,8 @@ export const icons = {
   undo: arrowUUpLeft,
   folderDashed,
   gitDiff,
+  gitBranch,
+  laptop,
   archive,
   spinner: circleNotch,
   plus,
