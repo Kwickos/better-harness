@@ -442,4 +442,5 @@ export const fr: Record<string, string> = {
   "It was modified since you opened it. Overwrite it with your version?": "Il a été modifié depuis que tu l'as ouvert. L'écraser avec ta version ?",
   "Overwrite": "Écraser",
   "Open in the panel": "Ouvrir dans le panneau",
+  "{name} is over 50 MB: drag it in instead.": "{name} dépasse 50 Mo : glisse-le plutôt.",
 };

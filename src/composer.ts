@@ -24,11 +24,36 @@ interface Deps {
   home: (path: string) => string;
   onChange: () => void;
   onSubmit: () => void;
+  guard: <T>(p: Promise<T>) => Promise<T | undefined>;
 }
 
 const COMMANDS_MAX = 50;
 const FILES_DEBOUNCE = 120;
 const STORE = "bh.commands";
+/** Same limit as `pasted.rs`. */
+const PASTE_MAX_BYTES = 50 * 1024 * 1024;
+
+/** A name that says nothing: a pasted screenshot gets a clearer one. */
+const GENERIC_NAME = /^(image|blob)?(\.\w+)?$/i;
+
+function pastedName(file: File): string {
+  if (file.name && !GENERIC_NAME.test(file.name)) return file.name;
+  const ext = file.type.split("/")[1]?.replace("jpeg", "jpg").replace(/\+.*$/, "") || "bin";
+  return `${file.type.startsWith("image/") ? "screenshot" : "pasted"}.${ext}`;
+}
+
+/**
+ * Files win over text only when the text is just their label: the Finder adds the file name,
+ * a browser the image URL. Copied table cells come with a picture of them, but the text is what counts.
+ */
+function pastedFiles(data: DataTransfer | null): File[] {
+  const files = [...(data?.files ?? [])];
+  if (!files.length) return [];
+  const text = data?.getData("text/plain").trim() ?? "";
+  if (!text || /^https?:\/\/\S+$/.test(text)) return files;
+  const names = new Set(files.map((f) => f.name));
+  return text.split(/\r?\n|\r/).every((line) => names.has(line.trim()) || names.has(line.trim().split("/").pop() ?? "")) ? files : [];
+}
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const baseName = (path: string) => path.replace(/\/$/, "").split("/").pop() ?? path;
@@ -324,6 +349,13 @@ export function initComposer(d: Deps) {
     changed();
   }
 
+  /** Adds a file at the end of the message, like a typed mention. */
+  function attach(path: string) {
+    // A field emptied by hand can keep a line break: the file then goes on the first line.
+    const before = text().trim() ? text() : "";
+    setText(`${before}${before && !/\s$/.test(before) ? " " : ""}${fileValue(path)} `);
+  }
+
   // ------------------------------------------------------------ events
 
   input.addEventListener("input", () => {
@@ -337,7 +369,32 @@ export function initComposer(d: Deps) {
   input.addEventListener("blur", close);
   input.addEventListener("paste", (e) => {
     e.preventDefault();
-    document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "");
+    const files = pastedFiles(e.clipboardData);
+    if (!files.length) {
+      document.execCommand("insertText", false, e.clipboardData?.getData("text/plain") ?? "");
+      return;
+    }
+    void (async () => {
+      for (const file of files) {
+        // Stopped here rather than in Rust, which would only refuse it once read into memory.
+        const saved = file.size > PASTE_MAX_BYTES ? Promise.reject(t("{name} is over 50 MB: drag it in instead.", { name: file.name || pastedName(file) })) : d.api.savePasted(file, pastedName(file));
+        const path = await d.guard(saved);
+        if (path) attach(path);
+      }
+    })();
+  });
+
+  // Files dragged anywhere on the window land in the message; the field shows it will take them.
+  const form = input.closest("form") ?? input;
+  void d.api.onFileDrop((e) => {
+    // A modal (settings) covers the conversation: nothing to drop into.
+    const covered = document.querySelector("dialog[open]") !== null;
+    if (e.type === "over") {
+      if (e.files !== null) form.classList.toggle("is-dropping", e.files && !covered);
+      return;
+    }
+    form.classList.remove("is-dropping");
+    if (e.type === "drop" && !covered) for (const path of e.paths) attach(path);
   });
   input.addEventListener("keydown", (e) => {
     if (e.isComposing) return;
@@ -371,11 +428,7 @@ export function initComposer(d: Deps) {
   return {
     text,
     setText,
-    /** Adds a file at the end of the message, like a typed mention. */
-    attach(path: string) {
-      const before = text();
-      setText(`${before}${before && !/\s$/.test(before) ? " " : ""}${fileValue(path)} `);
-    },
+    attach,
     clear,
     focus,
     setPlaceholder: (value: string) => {
