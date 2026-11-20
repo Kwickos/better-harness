@@ -5,5 +5,8 @@ import { defineConfig } from "vite";
 export default defineConfig({
   clearScreen: false,
   server: { port: 1420, strictPort: true, watch: { ignored: ["**/src-tauri/**"] } },
-  build: { target: "safari16", sourcemap: false, cssCodeSplit: false },
+  // No modulepreload polyfill: WebKit 16 (Ventura) lacks modulepreload, so the polyfill
+  // fetch()es each chunk, which the CSP's connect-src refuses ("TypeError: Load failed"
+  // as an unhandled rejection). The preload is only a hint; the imports load fine without it.
+  build: { target: "safari16", sourcemap: false, cssCodeSplit: false, modulePreload: { polyfill: false } },
 });
