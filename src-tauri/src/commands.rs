@@ -457,6 +457,28 @@ pub fn attachments(app: tauri::AppHandle, cwd: String, paths: Vec<String>) -> Ve
         .collect()
 }
 
+/// A pasted file (screenshot, file copied in the Finder), sent as raw bytes with its name
+/// in the `x-name` header. Returns where it was written.
+#[tauri::command]
+pub async fn save_pasted(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    use tauri::Manager;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected raw bytes".into());
+    };
+    let name = request.headers().get("x-name").and_then(|v| v.to_str().ok()).unwrap_or("pasted");
+    let name = crate::pasted::percent_decode(name);
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("pasted");
+    let bytes = bytes.clone();
+    let path = tauri::async_runtime::spawn_blocking(move || crate::pasted::save(&dir, &name, &bytes)).await.map_err(|e| e.to_string())??;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Paths dropped on the window, folders marked with a trailing "/".
+#[tauri::command]
+pub fn dropped_paths(paths: Vec<String>) -> Vec<String> {
+    crate::pasted::mark_dirs(paths)
+}
+
 /// `false`: the file could run (script, shortcut, executable); the UI shows it in the Finder.
 #[tauri::command]
 pub fn open_attachment(path: String) -> Result<bool, String> {

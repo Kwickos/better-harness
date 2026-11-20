@@ -1,6 +1,7 @@
 // Typed bridge to the Rust core (src-tauri/src/commands.rs).
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 export type SessionState = "idle" | "starting" | "ready" | "busy" | "suspended";
 
@@ -378,6 +379,18 @@ export const tauriApi = {
     (await invoke<Attachment[]>("attachments", { cwd, paths })).map((a) => (a.image ? { ...a, url: convertFileSrc(a.path) } : a)),
   /** `false`: the file could run, better to show it in the Finder. */
   openAttachment: (path: string) => invoke<boolean>("open_attachment", { path }),
+  /** A pasted file without a path (screenshot, file copied in the Finder): written to the cache, its path returned. */
+  savePasted: async (file: Blob, name: string) =>
+    invoke<string>("save_pasted", new Uint8Array(await file.arrayBuffer()), { headers: { "x-name": encodeURIComponent(name) } }),
+  /** Files dragged onto the window. Tauri takes over HTML drag and drop: only this event carries paths. */
+  onFileDrop: async (cb: (e: FileDrop) => void) => {
+    await getCurrentWebview().onDragDropEvent(async ({ payload: p }) => {
+      if (p.type === "leave") cb({ type: "leave" });
+      else if (p.type === "drop") cb({ type: "drop", paths: p.paths.length ? await invoke<string[]>("dropped_paths", { paths: p.paths }) : [] });
+      else if (p.type === "enter") cb({ type: "over", files: p.paths.length > 0 });
+      else cb({ type: "over", files: null });
+    });
+  },
   fileOpen: async (cwd: string, path: string) => {
     const f = await invoke<FileView>("file_open", { cwd, path });
     return f.text === null && f.kind !== "binary" && f.kind !== "large" ? { ...f, url: convertFileSrc(f.path) } : f;
@@ -441,5 +454,8 @@ export interface Rect {
   w: number;
   h: number;
 }
+
+/** `over`: `files` says whether files are dragged (`null` while the drag moves, already known). */
+export type FileDrop = { type: "over"; files: boolean | null } | { type: "drop"; paths: string[] } | { type: "leave" };
 
 export type Api = typeof tauriApi;

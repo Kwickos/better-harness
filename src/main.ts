@@ -146,6 +146,7 @@ const composer = initComposer({
   home,
   onChange: () => renderComposer(),
   onSubmit: () => $("composer").dispatchEvent(new Event("submit", { cancelable: true })),
+  guard,
 });
 
 function removeArtifact(url: string) {

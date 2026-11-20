@@ -457,6 +457,8 @@ details.tool.is-thinking > summary { font-weight: 500; color: var(--ink-2); }
 
 #composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 10px 8px 8px 12px; border-radius: 16px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line-2), var(--box-shadow); } /* taste-skill-ignore: composer outline */
 #composer:focus-within { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 26%, transparent), var(--box-shadow); } /* taste-skill-ignore */
+/* Files dragged over the window: the field outlines itself to show where they go. */
+#composer.is-dropping { box-shadow: inset 0 0 0 1.5px var(--mention-file), var(--box-shadow); background: color-mix(in srgb, var(--mention-file) 5%, var(--bg)); } /* taste-skill-ignore */
 #input { display: block; width: 100%; min-height: 28px; max-height: 240px; margin: 0; padding: 0 4px 6px 2px; overflow-y: auto; border: 0; outline: 0; background: transparent; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; -webkit-user-select: text; user-select: text; }
 #input.is-empty::before { content: attr(data-placeholder); float: left; height: 0; color: var(--ink-3); pointer-events: none; }
 /* Mentions: a label one step below the text, selected as a single block. */

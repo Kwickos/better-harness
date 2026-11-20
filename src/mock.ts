@@ -651,6 +651,29 @@ export const mockApi: Api = {
     return paths.map((p) => mockAttachment(cwd, p));
   },
   openAttachment: async (path) => !path.endsWith(".command"),
+  savePasted: async (_file, name) => `/Users/demo/Library/Caches/dev.betterharness.desktop/pasted/1-0/${name}`,
+  // In a browser, HTML drag and drop works but hides paths: a demo folder stands in for them.
+  onFileDrop: async (cb) => {
+    let depth = 0;
+    const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes("Files") ?? false;
+    window.addEventListener("dragenter", (e) => {
+      if (!hasFiles(e)) return;
+      depth++;
+      cb({ type: "over", files: true });
+    });
+    window.addEventListener("dragover", (e) => {
+      if (hasFiles(e)) e.preventDefault();
+    });
+    window.addEventListener("dragleave", (e) => {
+      if (hasFiles(e) && --depth <= 0) cb({ type: "leave" });
+    });
+    window.addEventListener("drop", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      cb({ type: "drop", paths: [...(e.dataTransfer?.files ?? [])].map((f) => `/Users/demo/Downloads/${f.name}`) });
+    });
+  },
   fileOpen: async (cwd, path) => {
     await sleep(30);
     const full = path.startsWith("/") ? path : `${cwd}/${path}`;

@@ -13,6 +13,7 @@ mod mcp;
 mod mentions;
 mod metrics;
 mod next_step;
+mod pasted;
 mod protocol;
 mod servers;
 mod settings;
@@ -123,6 +124,8 @@ pub fn run() {
             commands::artifact_delete,
             commands::attachments,
             commands::open_attachment,
+            commands::save_pasted,
+            commands::dropped_paths,
             commands::file_open,
             commands::file_save,
             commands::sim_devices,
